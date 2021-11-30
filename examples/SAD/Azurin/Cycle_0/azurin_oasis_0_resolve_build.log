@@ -1,0 +1,535 @@
+ ------------------------  COPYRIGHT NOTICE  ---------------------------------
+                   Los Alamos National Laboratory
+ This program was prepared by the Regents of the University of California at
+ Los Alamos National Laboratory (the University) under  Contract No. 
+ W-7405-ENG-36 with the U.S. Department of Energy (DOE).  The University has 
+ certain rights in the program pursuant to the contract and the program should
+ not be copied or distributed outside your organization.  All rights in the 
+ program are reserved by the DOE and the University.  Neither the U.S. 
+ Government nor the University makes any warranty, express or implied, or 
+ assumes any liability or responsibility for the use of this software.
+
+        *******************************************************
+        *                --- RESOLVE ---                      *
+        *                                                     *
+        *        Statistical density modification             *
+        *            Automated model-building                 *
+        *                                                     *
+        *      Type "resolvehelp" for on-line help            *
+        *        or see "http://solve.lanl.gov"               *
+        *******************************************************
+
+               (version 2.05 of 29-May-2003)
+                       (size =  6)         
+   Tom Terwilliger, Los Alamos National Laboratory, "terwilliger@LANL.gov"
+
+
+       The date today is  1-apr-05.  Your license is good until 15-nov-92.
+
+>hklin azurin_oasis_0_dm.mtz                                                    
+ Data to be read from mtz file: 
+ azurin_oasis_0_dm.mtz                                                           
+
+>LABIN FP=FP PHIB=PHIDM FOM=FOMDM                                               
+ Current value of "LABIN" is: 
+ labin FP=FP PHIB=PHIDM FOM=FOMDM                                                                                                                                                                                                        
+
+>build_only                                                                     
+ Building model only. No density modification
+
+>hklout resolve.mtz                                                             
+ Data to be written to mtz file: 
+ resolve.mtz                                                                     
+
+>solvent_content 0.45             ! your solvent content goes here.             
+ Fraction of unit cell assumed to be solvent is:   0.449999988
+
+>! Next line is the file with your protein sequence.                            
+>seq_file /home/wang/oasis2004/src//examples/SAD/Azurin/azurin.seq              
+ Sequence file:
+ /home/wang/oasis2004/src//examples/SAD/Azurin/azurin.seq                        
+ Expecting 1-letter aa sequence of chains,
+  chains separated by lines starting with ">>>" 
+
+ All done with inputs
+ User:   wang                 Logical Name: azurin_oasis_0_dm.mtz
+ Status: READONLY   Filename: azurin_oasis_0_dm.mtz
+ HEADER INFORMATION FROM INPUT MTZ FILE ON INDEX  1
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ NDIF        1
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ PROJECT       0 HKL_base
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ CRYSTAL       0 HKL_base
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ DATASET       0 HKL_base
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ DCELL         0    52.6500   52.6500  100.6300   90.0000   90.0000   90.0000
+ 
+ 
+ ***  Warning
+ From LROPEN : Illegal keyword in MTZ header - line ignored
+ 
+ DWAVEL        0    0.00000
+ 
+ * Title:
+ 
+ OASIS2004
+ 
+ * Number of Columns =  11
+ 
+ * Number of Reflections =   7097
+ 
+ * Missing value set to NaN in input mtz  file
+ 
+ * Column Labels :
+ 
+ H K L FP SIGFP PHIB FOM PHIDM FOMDM FDM FreeR_flag
+ 
+ * Column Types :
+ 
+ H H H F Q P W P W F I
+ 
+ * Cell Dimensions :
+ 
+    52.65   52.65  100.63   90.00   90.00   90.00
+ 
+ *  Resolution Range :
+ 
+      0.00082     0.27700      (   34.922 -     1.900 A )
+ 
+ * There is no sort order recorded in the MTZ header
+ 
+ * Space group = P 41 2 2  (number    91)
+ 
+ * Input Program Labels :
+ 
+ H K L FP PHIB FOM HLA HLB HLC HLD FC PHIC SIGFP FWT FreeR_flag
+ 
+ * Input File Labels :
+ 
+ H K L FP SIGFP PHIB FOM PHIDM FOMDM FDM FreeR_flag
+ 
+ * Lookup Table : the number indicates the input column no.
+ * Array element n corresponds to the nth program label
+ 
+     0    0    0    4    8    9    0    0    0    0    0    0    0    0    0
+ 
+ FP taken from column 4
+ PHIB taken from column 8
+ FOM taken from column 9
+
+ No FreeR_flag read in but FreeR_flag will be created
+ Total of  7097 reflections read from file
+ Created FREE set with     335 members Fraction =   0.05
+ Mean FOM of input data (Working set) =     0.79 for n=  6762
+ Mean FOM of input data (FREE set)    =     0.79 for n=   335
+ FREE set will be excluded only in testing cycles, if at all
+ High-resolution limit of input phased data:  1.90
+ Adding F000 term (0.0) to this list
+ Closed mtz file
+ Starting resolution:  1.90 max:  1.90
+ Space group is 91
+
+ FORMATTED      OLD     file opened on unit  11
+ Logical name: SYMOP, Full name: /usr/local/lib/solve/symop.lib
+
+ Fine grids used for FFT
+   Centric Zone   1 Reflections of Type  0kl
+   Centric Zone   2 Reflections of Type  h0l
+   Centric Zone   3 Reflections of Type  hk0
+   Centric Zone   4 Reflections of Type  hhl
+   Centric Zone   5 Reflections of Type  h -hl
+
+ Transformations from orthogonal to fractional and back:
+
+               Orthogonal to fractional
+
+     fractional x=  0.0190 X +   0.0000 Y +   0.0000 Z 
+     fractional y=  0.0000 X +   0.0190 Y +   0.0000 Z 
+     fractional z=  0.0000 X +   0.0000 Y +   0.0099 Z 
+
+
+               Fractional to orthogonal
+
+     Orthogonal X= 52.6500 x +   0.0001 y +   0.0001 z 
+     Orthogonal Y=  0.0000 x +  52.6500 y +   0.0001 z 
+     Orthogonal Z=  0.0000 x +   0.0000 y + 100.6300 z 
+
+ Estimated # of atoms in au: 738
+ Not separating out FREE set from other reflections for main
+  cycles. Using all data.
+ Results of wilson scaling:
+ Scale on I =      3.885
+ B-value =     12.793
+
+ Scaling data with value of      3.885
+
+ Reading model density histograms from
+ /usr/local/lib/solve/segments/rho.list                                          
+ Read total of  6 sets of density functions
+
+ Summary of starting FOM vs resolution 
+    RES     FOM   FOM-smoothed  N 
+   16.76    0.69    0.79        53
+   10.53    0.74    0.79        83
+    7.87    0.69    0.79       149
+    6.20    0.72    0.79       241
+    5.23    0.81    0.79       232
+    4.52    0.86    0.79       410
+    3.95    0.83    0.79       454
+    3.54    0.84    0.79       456
+    3.23    0.83    0.79       469
+    2.99    0.81    0.79       457
+    2.77    0.78    0.79       549
+    2.60    0.81    0.79       440
+    2.46    0.76    0.79       509
+    2.32    0.80    0.79       609
+    2.18    0.78    0.79       697
+    2.06    0.80    0.79       614
+    1.95    0.76    0.79       675
+
+ Mean fom of this map was:  0.79
+
+ Starting phases assumed to be experimental
+    (To override, use "phases_from_resolve")
+
+
+ Estimating optimal initial smoothing radius  using the function:
+ R=2.41 * (dmin**0.90) * (fom**-0.26)
+ with dmin =   1.90003669 and fom =   0.79464674
+ Leading to R=  4.55887413
+ To override, set "wang_radius_cycle", "wang_radius", or "wang_radius_start"
+
+
+ Setting final smoothing radius to   4.
+ To override, set "wang_radius_cycle", "wang_radius", or "wang_radius_finish"
+
+
+ Adding extra mask cycle at end to build atomic model
+ Solvent content will be   0.45
+ Using database entry  5 for histograms  (" 3 A dehalogenase model       ")
+ Using all data for tests due to low number in test set
+  (override with "use_free_for_test")
+
+ Total mask cycles:  1
+
+  Cycle  Ref NCS  Use NCS  Build   image  solvent  Extend  Cycles  Test
+
+  1      NO        NO     YES      NO       NO       NO      0
+
+
+                         Mask cycle  1
+
+ Histogram DB entry #   5 (" 3 A dehalogenase model       ")
+ Solvent content:  0.45 Smoothing radius:  4.00
+ Using histogram-based mask
+ Assuming this cycle is unbiased (no previous density modification)
+
+
+Plot     1
+
+
+ -------------------------------------------------------------------------------
+
+ Plot of probability that a grid point is part of protein region
+ vs percentiles of grid points
+
+ All points to the left of the "+" signs are in solvent masked region
+ those to right are in protein masked region.
+
+ The values of p(protein) should change from low to high approximately at the 
+ value of the fraction of solvent indicated by the "+" signs.
+ The sharper the transition the better.
+
+ Note: the mask is only used to make an estimate of the p(protein)
+
+ The values of p(protein) are used to weight the contribution of each grid
+  point to the probability of the map:
+
+  p(rho) = p(rho|protein) p(protein) +  p(rho|solvent) (1-p(protein))
+
+ This says that the probability that we would observe  the value "rho"  of 
+ electron density at this point is the probability that we 
+ would observe "rho" if this were really protein times the probability 
+ that this is  protein, plus the probability that we would observe
+ "rho" if it were really solvent, times the probability that
+ it is solvent.
+
+                     Probability that grid points are in protein region
+
+
+                         1.0  ...............................xxxxxxxxxxxxxxxxxxx
+                              .                     +     xxx                  .
+                              .                     +    x                     .
+                              .                     +   x                      .
+                              .                     +  x                       .
+                              .                     +                          .
+                              .                     + x                        .
+                p(protein)    .                     +x                         .
+                         0.5  .                   xxx                          .
+                              .               xxxx  +                          .
+                              .             xx      +                          .
+                              .           xx        +                          .
+                              .          x          +                          .
+                              .                     +                          .
+                              .  xxxxxxxx           +                          .
+                         0.0  .xx...................+...........................
+
+                              0       20        40        60        80       100
+
+                                            Percentile of grid points
+ -------------------------------------------------------------------------------
+
+
+ Reading template side chain maps from:
+ /usr/local/lib/solve/segments/                                                  
+ Reading template segment files from:
+ /usr/local/lib/solve/segments/                                                  
+ Total number of segments read for class  1 is  52
+ Total number of segments read for class  2 is  31
+
+ TEMPLATE  1 TEMPLATE FILE: 
+ /usr/local/lib/solve/segments/template_30_mean_1.ezd                            
+ ! MEAN RHO FOR TEMPLATE TYPE 1 (HELIX               ) ; DMIN=  3.02             
+ TEMPLATE  1 CC FILE: 
+ /usr/local/lib/solve/segments/template_30_corr_1.ezd                            
+ ! CC OF RHO FOR TEMPLATE TYPE 1 (HELIX               ) ; DMIN=  3.02            
+ TEMPLATE  1 MASK FILE: 
+ /usr/local/lib/solve/segments/template_30_mask_1.ezd                            
+ ! TEMPLATE MASK FOR  TEMPLATE TYPE 1 (HELIX               ) ; DMIN=  3.02       
+ Rmax in template =   11.0554161
+ |xyz| in template =   10.  7.5  6.66666698
+ Setting template values to 0 outside mask:
+ mean, rms of template_sd inside mask:  0.637168825  0.645368457
+ Setting average template values to 0
+ CUTOFF for nrefl =  7098 p_cut=   0.100000001 =   4.19999981
+ End of rotation about X =   100.
+
+ TEMPLATE  2 TEMPLATE FILE: 
+ /usr/local/lib/solve/segments/template_30_mean_2.ezd                            
+ ! MEAN RHO FOR TEMPLATE TYPE 2 (STRAND              ) ; DMIN=  3.02             
+ TEMPLATE  2 CC FILE: 
+ /usr/local/lib/solve/segments/template_30_corr_2.ezd                            
+ ! CC OF RHO FOR TEMPLATE TYPE 2 (STRAND              ) ; DMIN=  3.02            
+ TEMPLATE  2 MASK FILE: 
+ /usr/local/lib/solve/segments/template_30_mask_2.ezd                            
+ ! TEMPLATE MASK FOR  TEMPLATE TYPE 2 (STRAND              ) ; DMIN=  3.02       
+ Rmax in template =   11.0554161
+ |xyz| in template =   10.  5.83333302  5.
+ Setting template values to 0 outside mask:
+ mean, rms of template_sd inside mask:  0.294410259  0.328243762
+ Setting average template values to 0
+ CUTOFF for nrefl =  7098 p_cut=   0.100000001 =   4.19999981
+ End of rotation about X =   360.
+
+ Reading template fragment files from:
+ /usr/local/lib/solve/segments/fragment_1_0.pdb
+ /usr/local/lib/solve/segments/fragment_2_0.pdb
+ Total number of template classes read:  2
+
+ Identifying motifs in electron density map
+
+
+ CLASS:  1
+ Searching for helical fragments...
+
+ Template search: rotation about X is from  0.00 to 379.00 with 
+ increment of  30.00
+ RMSD min=   2.28
+ RANGE:    10.00    7.50    6.67
+
+ Number of templates needed to have 4-fold redundancy 
+with fraction of this class of   0.50
+ and total atoms in the a.u. of about     738 is    184
+
+ MAX of  369 peaks to be kept in template search
+ MAX of  184 peaks to be kept after refinement
+ Total of         53 rotations considered
+ Number of peaks in final unrefined list =  369
+
+ Sorted refined list:
+  Peak  CC     rotx-1  roty    rotx-2     X       Y       Z
+ Ending search for peaks as we have reached 2/3 the target of  184
+ and the template CC has fallen below   0.39732337
+
+ CLASS:  2
+ Searching for strand fragments...
+
+ Template search: rotation about X is from  0.00 to 379.00 with 
+ increment of  40.00
+ RMSD min=   1.71
+ RANGE:    10.00    5.83    5.00
+
+ Number of templates needed to have 4-fold redundancy 
+with fraction of this class of   0.50
+ and total atoms in the a.u. of about     738 is    184
+
+ MAX of  369 peaks to be kept in template search
+ MAX of  184 peaks to be kept after refinement
+ Total of        441 rotations considered
+ Number of peaks in final unrefined list =  369
+
+ Sorted refined list:
+  Peak  CC     rotx-1  roty    rotx-2     X       Y       Z
+ Ending search for peaks as we have reached 2/3 the target of  184
+ and the template CC has fallen below   0.39732337
+ Writing peaks to:
+ resolve_peaks.dat                                                               
+ Read  1 chains from file
+ /home/wang/oasis2004/src//examples/SAD/Azurin/azurin.seq                        
+
+ CHAIN  1 with  129 residues:
+ AQCEATVESNDAMQYNVKEIVVDKSCKQFTMHLKHVGKMAKVAMGHNLVLTKDADKQAVATDGMGAGLAQDYVKAGDT
+ RVIAHTKVIGGGESDSVTFDVSKIAAGENYAYFCSFPGHWAMMKGTLKLGS
+
+ Reading/writing to the fragment file: 
+ fragments.dat                                                                   
+ Done with segment placement
+
+ Cutoffs for macro-cycle    1 of    2:
+ z_cut:    0.500    z_cut_extend:   -0.500
+ r_min:    1.000    r_min_side:      0.300
+ No additional fragments found after  4 cycles of fragment placement
+ Total of  176 of  254 fragments identified in map will be used
+
+ Linking together fragments.. 168 254
+
+ Cutoffs for macro-cycle    2 of    2:
+ z_cut:   -0.500    z_cut_extend:   -1.500
+ r_min:    0.500    r_min_side:     -0.200
+ No additional fragments found after  1 cycles of fragment placement
+ Total of  168 of  254 fragments identified in map will be used
+
+ Linking together fragments.. 207 254
+ Guess of number of copies of sequence in au: 1
+
+ Expected amino acid composition of au: with   129 aa total:
+
+ GLY   :    13
+ ALA   :    16
+ SER   :     7
+ VAL   :    13
+ ILE   :     4
+ LEU   :     6
+ MET   :     7
+ CYS   :     3
+ PHE   :     4
+ TYR   :     4
+ LYS   :    13
+ ARG   :     1
+ TRP   :     1
+ HIS   :     5
+ GLU   :     5
+ ASP   :     9
+ GLN   :     5
+ ASN   :     4
+ PRO   :     1
+ THR   :     8
+
+ Number of NCS copies expected: 1
+ No sequence matches found
+
+       Summary of molecular assembly results:
+
+ NCS copies:   1
+
+
+ Molecule: 1  Chain: 1:  No residues placed.
+
+
+
+ Total residues placed:    0 of   129 or     0%
+ Residues built without side chains:    55
+ Total residues built:   55 or    42%
+
+ Total score for this arrangement:     0.0
+
+
+ Match of sequence to side-chain density: 
+
+
+  Generating map from model
+
+ Finding best overall B and increment
+
+ Recovered map with  35978 elements covers     24.3% of the asymmetric unit
+ CC of recovered map with resolve map:
+       Overall:   0.35   In overlap region:   0.51
+ Radius used for map calculation:   2.88 A
+ Overall pseudo B-factor:   14.6
+ B-factor increment for each atom past CB:   0.0
+
+
+
+  Setting B values based on fit to map
+  and setting b_overall=0 beta_b=0
+
+ Writing coordinates of resolve model to:
+ resolve.pdb                                                                     
+  (Q)QOPEN allocated #  1
+ User:   wang                 Logical Name: resolve.mtz
+ Status: UNKNOWN    Filename: resolve.mtz
+ HEADER INFORMATION FOR OUTPUT MTZ FILE ON INDEX  3
+ 
+ * Title:
+ 
+ 
+ 
+ * Number of Columns =  12
+ 
+ * Number of Reflections =   7097
+ 
+ * Missing value set to NaN in output mtz  file
+ 
+ * Column Labels :
+ 
+ H K L FP SIGFP PHIM FOMM HLAM HLBM HLCM HLDM FreeR_flag
+ 
+ * Column Types :
+ 
+ H H H F Q P W A A A A I
+ 
+ * Cell Dimensions :
+ 
+    52.65   52.65  100.63   90.00   90.00   90.00
+ 
+ *  Resolution Range :
+ 
+      0.00082     0.27700      (   34.916 -     1.900 A )
+ 
+ * There is no sort order recorded in the MTZ header
+ 
+ * Space group = P4122  (number    91)
+ 
+
+
+ **********************************************************************
+ *                                                                    *
+ *     NOTE:  STARTING HIGH RESOLUTION LIMIT ADJUSTED TO   1.90 A     *
+ *   (Use the keyword resolution to set a different value)            *
+ *                                                                    *
+ **********************************************************************
+
+              All done ..
+

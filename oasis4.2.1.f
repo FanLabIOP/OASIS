@@ -1,0 +1,5456 @@
+************************************************************************
+*                                                                      *
+*    OASIS-4.2.1                                                         *
+*                                                                      *
+*    A DIRECT-METHOD PROGRAM FOR PHASING PROTEIN DIFFRATION DATA       *
+*    BASED ON A PARTIAL STRUCTURE WITH OR WITHOUT SAD/SIR              *
+*    INFORMATION                                                       *
+*                                                                      *
+*    COPYRIGHT (C) 1988-2020                                           *
+*                                                                      *
+*    This code is distributed under the terms and conditions of the    *
+*    CCP4 Program Suite Licence Agreement as a CCP4 Application.       *
+*                                                                      *
+************************************************************************
+C
+C     
+C     ===============
+      PROGRAM OASIS_4
+C     ===============
+      COMMON /CCP4_FMT/ LABIN
+C       SINE AND COSINE OF CELL ANGLES PLUS TRIGONOMETRIC PART OF VOLUME
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      REAL NCONST
+      CHARACTER ITLE
+
+C
+      CHARACTER STRING(80)
+      CHARACTER*200 AA,BB
+      LOGICAL EOF,LOGMSS(9)
+      CHARACTER*4 KEY, CCVAL(20)
+      CHARACTER*400 LINE
+      CHARACTER NCH(7)
+      INTEGER NTOK, IBEG(20), IEND(20), ITYP(20), IDEC(20)
+      REAL FVAL(20)
+C
+      CHARACTER MDLLINE*240
+      LOGICAL INPUTMODEL
+C
+      CHARACTER*500 LABIN
+      DATA LABIN /'LABIN FP=FP SIGFP=SIGFP DANO=DANO SIGDANO=SIGDANO'/
+C
+      DATA ICON_OR_NRS /0/, ISAD_OR_SIR /0/
+
+C     ===================
+      CHARACTER*80 VERSION
+      CALL GETARG(1,VERSION)
+      if(VERSION == "-V")then
+        write (*,"(A10)") "oasis4-2-1"
+        goto 110
+      endif
+
+C INITIALIZE CCP4 ROUTINES
+C          *****************************************************
+      CALL CCP4_PROG_VERSION('4.2',0)
+      CALL CCPFYP
+      CALL CCP4H_INIT()
+      CALL CCP4H_SUMMARY_BEG()
+      CALL CCP4H_HEADER('OASIS','OASIS',1)
+      CALL CCP4H_SUMMARY_END()
+      CALL CCP4H_PRE_BEG()
+      CALL CCPRCS (6, 'OASIS', '$Date: 2009/06/29 10:47:54 $')
+C
+      CALL WRITECOPYRIGHT
+C          *****************************************************
+C
+
+C --- KEYWORD FILE 
+      CALL CCPDPN(8,'KEYWORD','SCRATCH','F',80,0)
+      CALL CCPDPN(18,'KEYTEMP','SCRATCH','F',80,0)
+C --- DATA FILE
+      CALL CCPDPN(9,'PROTDT','SCRATCH','F',80,0)
+
+C INITIALIZE THE PARAMETERS: PI & DTOR
+      PI=4.0*ATAN(1.0)
+      DTOR=PI/180.0
+
+C PREPARING THE KEYWORD FILE
+    1 READ(5,10,END=2) AA
+      BB=AA
+      NTOK = 20
+      CALL PARSER (KEY, AA, IBEG,IEND,ITYP,FVAL,CCVAL,
+     +     IDEC,NTOK,EOF,.FALSE.)
+      CALL CCPUPC(KEY)
+      IF (KEY.EQ.'LABI') THEN
+       LABIN='LABIN '
+       LABIN(7:200)=AA(IBEG(2):IEND(NTOK))
+      ELSE IF (KEY.EQ.'CON') THEN
+       ICON_OR_NRS = ICON_OR_NRS +1
+       WRITE(8,10) BB
+      ELSE IF (KEY.EQ.'NRS') THEN
+       ICON_OR_NRS = ICON_OR_NRS +1
+       WRITE(8,10) BB
+      ELSE IF (KEY.EQ.'SAD') THEN
+       ISAD_OR_SIR = ISAD_OR_SIR + 1
+       WRITE(18,10) BB
+      ELSE IF (KEY.EQ.'SIR') THEN
+       ISAD_OR_SIR = ISAD_OR_SIR + 1
+       WRITE(18,10) BB
+      ELSE IF (KEY.EQ.'DMR') THEN
+       ISAD_OR_SIR = ISAD_OR_SIR + 1
+       WRITE(18,10) BB
+      ELSE IF (KEY.EQ.'END') THEN
+       GOTO 2
+      ELSE
+       WRITE(18,10) BB
+      END IF
+      GOTO 1
+    2 CONTINUE
+   10 FORMAT(A200)
+C     TO BE SURE KEY-WORDS CON/NRS IN THE TOP OF FILE
+      REWIND(18)
+   80 READ(18,10,END=100) AA
+      WRITE(8,10) AA
+      GOTO 80
+  100 CONTINUE
+C   
+C     COMPULSORY KEYWORD(S) missing will cause unexpected errors, so check it...
+C
+      IF (ICON_OR_NRS.EQ.0.OR.ISAD_OR_SIR.EQ.0) THEN
+C
+C     Keyword CON missing ...
+C
+       IF (ICON_OR_NRS .EQ. 0) WRITE(6,350)
+  350 FORMAT(//,'--- Missing the keyword CON/NRS ---',//,
+     &'This keyword specifies the contents in the asymmetric unit,',
+     &' which can be approximately estimated as follows:',
+     &'Let r be the number of residues in the asymmetric unit',
+     &' then the contents will be C 5r, N 1.2r, O 1.5r, H 8r plus',
+     &' atoms other than the above chemical elements.',//)
+
+C
+C     KEYWORD SAD/SIR IS COMPULSORY.
+C
+       IF (ISAD_OR_SIR .EQ. 0) WRITE(6,370)
+  370 FORMAT(//,'--- Missing keywords SAD/SIR/DMR ---',//
+     &       'This specifies that SAD phasing or SIR phasing or DMR ',
+     &       'is to be performed.',//)
+C
+C     ERROR HANDLING
+C
+      CALL CCPERR(1,'Missing keywords, check LOG file for details')
+      END IF
+C
+C     FRAGMENT CARTESIAN COORDINATES(PDB) IF XYZIN EXISTS ...
+C
+      CALL UGTENV('XYZIN',MDLLINE)
+      INPUTMODEL =(MDLLINE.NE.' ')
+C
+C     TRANSLATE CARTESIAN COORDINATE TO FRACTIONAL COORDINATE ...
+C
+      IF(INPUTMODEL) CALL PDBIN
+      IF(INPUTMODEL) GOTO 400
+C
+C     FRAGMENT FRACTIONAL COORDINATES(OASIS) IF FRCIN EXISTS ...
+C
+      CALL UGTENV('FRCIN',MDLLINE)
+      INPUTMODEL =(MDLLINE.NE.' ')
+
+      IF(INPUTMODEL) CALL FRAIN(MDLLINE,INPUTMODEL,IFRC)
+
+  400 WRITE(8,FMT='(A)') "END"
+      REWIND(8)
+C
+C ---- READ MTZ FILE TO OBTAIN THE SPACE GROUP
+C         CELL PARAMETERS INFORMATION &
+C         REFLECTIONS
+C
+C          ******
+      CALL RCARDS
+C          ******
+C
+C          =========
+      CALL PREPARPRO
+C          =========
+C
+C          =======
+      CALL SIGNPRO
+C          =======
+C
+      CLOSE(8,STATUS='DELETE',ERR=500)
+  500 CONTINUE 
+      CLOSE(9,STATUS='DELETE',ERR=510)
+  510 CONTINUE
+      CLOSE(18,STATUS='DELETE',ERR=520)
+  520 CONTINUE 
+      CALL CCPERR(0,'NORMAL TERMINATION')
+  110 END
+C
+C    ============================
+      SUBROUTINE RCARDS
+C    ============================
+C
+      PARAMETER ( NREFL = 800000 )
+
+      COMMON /CCP4_FMT/ LABIN
+      COMMON /CCP4_SYM/ NSYMM, MSYMP, NSPGRX, SPGRN, PGNAM, RSM, LTYPE
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+
+      CHARACTER*500 LABIN
+      REAL CELL(6)
+
+C..   MAX # OF COLUMNS IN MTZ DATAFILE
+      INTEGER MAXCOL
+      PARAMETER (MAXCOL = 200)
+C     
+C LOCALS
+      REAL DATA(200)
+      LOGICAL LOGMSS(200)
+      LOGICAL EOF,LEND
+      CHARACTER VERSN*10
+      CHARACTER*1 LTYPE
+      CHARACTER*10 SPGRN,PGNAM
+      REAL RSM(4,4,192)
+      CHARACTER*1 NCH(7)
+
+C     INPUT COLUMNS TO BE ASSIGNED TO SOMETHING
+      INTEGER NINASN
+      PARAMETER (NINASN=11)
+C
+C     LSPRGI IS PROGRAM NAMES FOR DESIRED DATA "FP","SIGFP"
+C      CTPRGI IS TYPE OF EACH DATA
+C      LOOKUP IS LOOKUP TABLE OF WHERE THE DESIRED DATA IS LOCATED
+
+      CHARACTER LSPRGI(NINASN)*30, CTPRGI(NINASN)*1
+      INTEGER LOOKUP(NINASN), NLPRGI
+C
+C
+      INTEGER HKLIN, HKLOUT, IPRINT, IFAIL, NCOLI, NREFLI
+      REAL RANGES(2, MAXCOL)
+
+C
+
+
+C
+C     INPUT LABELS: SIR/OAS
+
+      DATA NLPRGI/NINASN/
+      DATA LSPRGI/'FP','SIGFP','FPH','SIGFPH','DANO','SIGDANO','PHIC',
+     &            'F(+)','SIGF(+)','F(-)','SIGF(-)'/
+      DATA CTPRGI/'F' ,'Q'    ,'F'  ,'Q'     ,'D'   ,'Q'      ,'P',
+     &            'G'   ,   'L'   ,  'G' ,   'L'/
+      DATA LOOKUP/NINASN*0/   
+
+      DATA NCH/'A','B','C','I','H','F','P'/
+
+
+
+C      WRITE(6,*)
+C      WRITE(6,*) 'MTZ_SETUP: SET UP TO READ MTZ FILE'
+C      WRITE(6,*) 
+
+      CALL MTZINI
+      
+C
+      HKLIN = 1
+      IPRINT = 1
+      IFAIL = 0
+      
+      CALL LROPEN (HKLIN,'HKLIN', IPRINT, IFAIL)
+      IF (IFAIL .NE. 0) THEN
+         WRITE(6,*)'SORRY, UNABLE TO OPEN MTZ FILE.'
+         CALL CCPERR(1,'---- MTZ FILE ERROR ----')
+      ENDIF
+C GET NUMBER OF COLUMNS ETC
+      CALL LRINFO(HKLIN, VERSN, NCOLI, NREFLI, RANGES)
+C.. GET SYMMETRY INFO
+      CALL LRSYMI(HKLIN, MSYMP, LTYPE, NSPGRX, SPGRN, PGNAM)
+      CALL LRSYMM(HKLIN, NSYMM, RSM)
+      WRITE(6,*)
+      WRITE(6,*)'SPACE GROUP IS ',NSPGRX,'#, ',
+     X   SPGRN,' WITH ',MSYMP,' MATRICES'
+         WRITE(6,*)  MSYMP, LTYPE, NSPGRX, SPGRN, PGNAM
+         DO 22 I=1,7
+         IF (LTYPE.EQ.NCH(I)) IN1=I
+   22    CONTINUE
+         LATT=MOD(IN1,7)+1
+         IF (LATT.LE.5) PTS=MIN0(2,LATT)
+         IF (LATT.GE.6) PTS=LATT-3
+         IF (IN1.EQ.6) LATT=6
+         IF (IN1.EQ.5) LATT=7
+         NSYM = NSYMM/PTS
+         DO N = 1, NSYM
+            DO I = 1, 3
+            TS(I,N) = RSM(I,4,N)
+               DO J = 1, 3
+                  IS(I,J,N) = NINT(RSM(J,I,N))
+               END DO
+            END DO
+         END DO
+         KSYS = 1
+         IF (NSPGRX.GE.3.AND.NSPGRX.LE.15) KSYS = 2
+         IF (NSPGRX.GE.16.AND.NSPGRX.LE.74) KSYS = 3
+         IF (NSPGRX.GE.75.AND.NSPGRX.LE.142) KSYS = 4
+         IF (NSPGRX.GE.143.AND.NSPGRX.LE.167) KSYS = 5
+         IF (NSPGRX.GE.168.AND.NSPGRX.LE.194) KSYS = 6
+         IF (NSPGRX.GE.195) KSYS = 8
+
+
+C... GET CELL PARAMETERS FROM HEADER TOO...
+      CALL LRCELL(HKLIN, CELL)
+      WRITE(6,*)
+      WRITE(6,*)
+
+         DO I = 1, 6
+            CX(I) = CELL(I)
+         END DO
+         CALL INCELL(VOLUME)
+
+C... GET COLUMN NAMES USER WANTS TO ASSIGN (FIGURE OUT IF
+C    THIS IS SIR OR OAS)
+C 
+      WRITE(6,*)
+      WRITE(6,*)
+C
+      CALL LKYASL(HKLIN, LABIN, NLPRGI,LSPRGI,CTPRGI,LOOKUP)
+C
+  
+  100 CONTINUE
+      CALL LRREFL(HKLIN, S, DATA, EOF)
+      IF(EOF) GO TO 5000
+      CALL LRREFM(HKLIN, LOGMSS)
+      IH=INT(DATA(1))
+      IK=INT(DATA(2))
+      IL=INT(DATA(3))
+C     F(+),SIGF(+),F(-),SIGF(-)
+      IF(LOOKUP(8).NE.0 .AND. LOOKUP(9).NE.0 .AND.
+     &   LOOKUP(10).NE.0 .AND. LOOKUP(11).NE.0) THEN
+    
+        ICENT = ICENTRIC(IH,IK,IL,CSYM)
+
+        DO IPM=8,11
+          IF(LOGMSS(IPM)) DATA(LOOKUP(IPM))=-1.0
+        END DO
+        FPLUS=DATA(LOOKUP(8))
+        SPLUS=DATA(LOOKUP(9))
+        FMINUS=DATA(LOOKUP(10))
+        SMINUS=DATA(LOOKUP(11))
+C
+      IF(SPLUS.GT.0. .AND. SMINUS.GT.0.)THEN
+C     WE HAVE BOTH:
+        FPVALUE=0.5*(FPLUS+FMINUS)
+        DFVALUE=(FPLUS-FMINUS)
+        SIGFPVALUE=0.5*SQRT(SPLUS**2+SMINUS**2)
+        SIGDFVALUE=2.0*SIGFPVALUE
+      ELSEIF(SPLUS.GT.0.)THEN
+        FPVALUE=FPLUS
+        SIGFPVALUE=SPLUS
+        DFVALUE=0.
+        SIGDFVALUE=0.
+      ELSEIF(SMINUS.GT.0.)THEN
+        FPVALUE=FMINUS
+        SIGFPVALUE=SMINUS
+        DFVALUE=0.
+        SIGDFVALUE=0.
+      ELSE
+        FPVALUE=0.
+        SIGVALUE=0.
+        DFVALUE=0.
+        SIGDFVALUE=0.
+        GOTO 100
+      ENDIF
+      IF(ICENT.EQ.1)THEN
+       DFVALUE=0.0
+       SIGDFVALUE=0.0
+      ENDIF
+
+      ELSE
+C
+C     SIR/SAD
+C     FP,SIGFP,FPH,SIGFPH,DANO,SIGDANO
+C
+      IF(LOGMSS(LOOKUP(1)).OR.LOGMSS(LOOKUP(2))) THEN
+       GOTO 100
+      ELSE
+       IFPVALUE=LOOKUP(1)
+       ISIGFPVALUE=LOOKUP(2)
+C
+C     SIR -- FPH,SIGFPH
+C
+      IF(LOOKUP(3).NE.0.AND.LOOKUP(4).NE.0) THEN
+       IFPHVALUE=LOOKUP(3)
+       ISIGFPHVALUE=LOOKUP(4)
+       IF(LOGMSS(IFPHVALUE) .OR. LOGMSS(ISIGFPHVALUE)
+     * .OR. DATA(IFPHVALUE).LE.0. .OR. DATA(ISIGFPVALUE).LE.0.) THEN
+        GOTO 100
+       ELSE
+       FPVALUE=DATA(IFPHVALUE)
+       SIGFPVALUE=DATA(ISIGFPHVALUE)
+       DFVALUE=DATA(IFPHVALUE)-DATA(IFPVALUE)
+       SIGDFVALUE=SQRT(DATA(ISIGFPHVALUE)**2+DATA(ISIGFPVALUE)**2)
+       END IF
+            ELSEIF(LOOKUP(5).NE.0.AND.LOOKUP(6).NE.0) THEN
+C
+C      SAD --- DANO,SIGDANO
+C
+       IDFVALUE=LOOKUP(5)
+       ISIGDFVALUE=LOOKUP(6)
+       FPVALUE=DATA(IFPVALUE)
+       SIGFPVALUE=DATA(ISIGFPVALUE)
+       IF(LOGMSS(IDFVALUE) .OR. LOGMSS(ISIGDFVALUE) ) THEN
+         DFVALUE=0.0
+         SIGDFVALUE=0.0
+       ELSE
+         DFVALUE=DATA(IDFVALUE)
+         SIGDFVALUE=DATA(ISIGDFVALUE)
+       ENDIF
+C
+C     DMR  --- NO DFVALUE AND SIGDFVALUE
+C
+      ELSE
+         FPVALUE=DATA(IFPVALUE)
+         SIGFPVALUE=DATA(ISIGFPVALUE)
+         DFVALUE=0.0
+         SIGDFVALUE=0.0
+      ENDIF
+      ENDIF
+      ENDIF
+C
+C     COMPARING THE BEST PHASE WITH THE STANDARD PHASES
+      IF(LOOKUP(7).NE.0) THEN
+        ICOMP=1
+        IF(LOGMSS(LOOKUP(7))) THEN
+         PHAIN=0.0
+        ELSE
+         PHAIN=DATA(LOOKUP(7))
+        ENDIF
+        WRITE(9,200)IH,IK,IL,FPVALUE,SIGFPVALUE,DFVALUE,SIGDFVALUE,PHAIN
+      ELSE
+        WRITE(9,250) IH,IK,IL,FPVALUE,SIGFPVALUE,DFVALUE,SIGDFVALUE
+      ENDIF
+      GOTO 100
+ 5000 CONTINUE
+  200 FORMAT(I5,2I4,2X,5F13.4)
+  250 FORMAT(I5,2I4,2X,4F13.4)
+C
+      CALL LRCLOS (HKLIN)
+      REWIND(9)
+      END
+C
+      SUBROUTINE LKYASL(MINDX,LINE,NLPRGI,LSPRGI,CTPRGI,LOOKUP)
+C     ========================================================
+C
+C---- THERE FOLLOWS A JIFFY SUBROUTINE TO DO COLUMN ASSIGNMENTS, BYPASSING
+C     THE NEED FOR KEYWORDED INPUT. THIS IS USEFUL IN WRITING LITTLE MTZ
+C     PROGRAMS, WITHOUT USING PARSER IN THE MAIN PROGRAM.          PRE
+C
+C LKYASL MUTATED FROM LKYASN, TAKING THE LINE FROM AN ARGUMENT INSTEAD
+C  OF READING FROM FILE    PHIL EVANS 17TH SEPTEMBER 1998
+C
+C     READ COLUMN ASSIGNMENTS AND MAKE THEM, FOR INPUT MTZ FILE 
+C     OPEN FOR READ ON INDEX MINDX
+C
+C     IT EXPECTS LINE TO CONTAIN A STRING OF THE FORM
+C       LABIN  PROGRAM_LABEL=FILE_LABEL PROGRAM_LABEL=FILE_LABEL . . .
+C
+C     THIS ROUTINE IS USEFUL FOR SIMPLE JIFFY PROGRAMS THAT DON'T WANT 
+C     FULL KEYWORDED INPUT
+C
+C     MINDX	(I)	INTEGER		FILE INDEX NUMBER FOR OPENED MTZ INPUT FILE
+C     LINE      (I)     CHARACTER*(*)   STRING CONTAINING LABIN LINE
+C
+C     NLPRGI    (I)	INTEGER		NUMBER OF INPUT PROGRAM LABELS
+C
+C     LSPRGI	(I)	CHARACTER*30	ARRAY OF DIMENSION AT LEAST NLPRGI
+C                               	CONTAINING THE PROGRAM LABEL STRINGS
+C
+C     CTPRGI	(I)	CHAR*1		ARRAY OF COLUMN TYPES FOR EACH COLUMN: 
+C					THESE WILL BE CHECKED TO SEE THAT THEY 
+C					MATCH THE ACTUAL COLUMN TYPES IN THE FILE. 
+C					IF YOU DON'T WANT TO CHECK COLUMN TYPES, 
+C					PROVIDE BLANK TYPES HERE
+C					(DIMENSION AT LEAST NLPRGI)
+C
+C     LOOKUP	(O)	INTEGER		ARRAY OF DIMENSION AT LEAST NLPRGI
+C					CONTAINING COLUMN NUMBERS FOR EACH 
+C					ASSIGNED LABEL
+C
+C     .. PARAMETERS ..
+      INTEGER MFILES
+      PARAMETER (MFILES=4)
+      INTEGER MAXTOK
+      PARAMETER (MAXTOK=100)
+C     ..
+C     .. SCALAR ARGUMENTS ..
+      INTEGER MINDX,NLPRGI
+      CHARACTER LINE*(*)
+C     ..
+C     .. ARRAY ARGUMENTS ..
+      INTEGER LOOKUP(*)
+      CHARACTER*1  CTPRGI(*)
+      CHARACTER*30 LSPRGI(*)
+C     ..
+C     .. LOCAL SCALARS ..
+      CHARACTER KEY*4,LINE2*400
+      INTEGER NTOK,ISTAT,IFAIL
+      LOGICAL LEND
+C     ..
+C     .. LOCAL ARRAYS ..
+      CHARACTER CVALUE(MAXTOK)*4
+      INTEGER IBEG(MAXTOK),IEND(MAXTOK),ITYP(MAXTOK),IDEC(MAXTOK)
+      REAL    FVALUE(MAXTOK)
+C     ..
+C     .. EXTERNAL SUBROUTINES ..
+      EXTERNAL PARSER,LKYIN,LRASSN,LERROR
+C
+C---- FIRST CHECK THAT THE MINDX IS VALID
+C
+      IF ((MINDX.LE.0) .OR. (MINDX.GT.MFILES)) THEN
+        WRITE (LINE2,FMT='(A,I3,A,1X,I1,1X,A)')
+     +    'FROM LKYASL : INDEX',MINDX,
+     +    ' IS OUT OF RANGE (ALLOWED 1..',MFILES,')'
+        ISTAT = 2
+        IFAIL = -1
+C
+C            ************************
+        CALL LERROR(ISTAT,IFAIL,LINE2)
+C            ************************
+C
+      ELSE
+C
+C---- LOOP TO READ CONTROL INPUT
+C
+ 1      NTOK=MAXTOK
+C
+C            *********************************************************
+        CALL PARSER(
+     +    KEY,LINE,IBEG,IEND,ITYP,FVALUE,CVALUE,IDEC,NTOK,LEND,.TRUE.)
+C            *********************************************************
+C
+        IF(LEND .OR. NTOK.LE.0) THEN
+          WRITE (LINE2,FMT='(A)')
+     +    'FROM LKYASL : *** BLANK LINE FOUND IN COLUMN ASSIGNMENT ***'
+          ISTAT = 1
+C
+C              ************************
+          CALL LERROR(ISTAT,IFAIL,LINE2)
+C              ************************
+C
+          RETURN
+        END IF
+C
+C
+        IF (KEY .EQ. 'LABI') THEN
+C
+C---- LABIN COLUMN ASSIGNMENTS
+C
+C              **********************************************
+          CALL LKYIN(MINDX,LSPRGI,NLPRGI,NTOK,LINE,IBEG,IEND)
+C              **********************************************
+C
+C---- COLUMN ASSIGNMENTS, SET LOOKUP
+C
+C              ****************************************
+          CALL LRASSN(MINDX,LSPRGI,NLPRGI,LOOKUP,CTPRGI)
+C              ****************************************
+C
+        ELSE
+C
+          WRITE (LINE2,FMT='(A,A)')
+     +    'FROM LKYASL:  *** COLUMN ASSIGNMENT SHOULD BEGIN',
+     +    ' WITH KEYWORD LABIN ***'
+          ISTAT = 1
+C
+C              ************************
+          CALL LERROR(ISTAT,IFAIL,LINE2)
+C              ************************
+C
+        END IF
+C
+      END IF
+      RETURN
+C
+      END
+
+C-----------------------------------------------------------------------
+
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C   PPPPPPPP   RRRRRRRR   EEEEEEEEE  PPPPPPPP       A      RRRRRRRR    C
+C   PPPPPPPPP  RRRRRRRRR  EEEEEEEEE  PPPPPPPPP     AAA     RRRRRRRRR   C
+C   PP     PP  RR     RR  EE         PP     PP    AA AA    RR     RR   C
+C   PP     PP  RR     RR  EE         PP     PP   AA   AA   RR     RR   C
+C   PPPPPPPPP  RRRRRRRRR  EEEEEEE    PPPPPPPPP  AA     AA  RRRRRRRRR   C
+C   PPPPPPPP   RRRRRRRR   EEEEEEE    PPPPPPPP   AA     AA  RRRRRRRR    C
+C   PP         RR  RR     EE         PP         AAAAAAAAA  RR  RR      C
+C   PP         RR   RR    EE         PP         AAAAAAAAA  RR   RR     C
+C   PP         RR    RR   EEEEEEEEE  PP         AA     AA  RR    RR    C
+C   PP         RR     RR  EEEEEEEEE  PP         AA     AA  RR     RR   C
+C                                                                      C
+C         PROGRAM FOR PRELIMINARY PROCESSING OF THE INPUT DATA         C
+C ** AN EXTENSIVE MODIFICATION OF THE PROGRAM 'NORMAL' OF MULTAN-80 ** C
+C                            VERSION   2011                            C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+      SUBROUTINE PREPARPRO
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON /CCP4_SYM/ NSYMM, MSYMP, NSPGRX, SPGRN, PGNAM, RSM, LTYPE
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+C     UNITS FOR INPUT/OUTPUT, TITLE, FLAGS, MAD/MIR
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      CHARACTER NGS(26),KX(10),ITERM(4),NTLE(80),ITLE,KSP,KP,KM,KEQ,KSC
+      CHARACTER*1 LTYPE
+      CHARACTER*10 SPGRN,PGNAM
+      REAL RSM(4,4,192)
+      DATA KX/'0','1','2','3','4','5','6','7','8','9'/
+      DATA KSP/' '/,KP/'+'/,KM/'-'/,KEQ/'='/,KSC/';'/
+      DATA ITERM/'H','K','L','N'/
+    1 FORMAT(/,'<FONT COLOR="#0000FF">',//,
+     &8X,'                                                           ',/
+     &8X,'         _/_/_/_/    _/_/_/_/    _/_/_/_/_/  _/_/_/_/      ',/
+     &8X,'        _/      _/  _/      _/  _/      _/  _/      _/     ',/
+     &8X,'       _/      _/  _/      _/  _/          _/      _/      ',/
+     &8X,'      _/_/_/_/    _/_/_/_/    _/_/_/_/    _/_/_/_/         ',/
+     &8X,'     _/          _/  _/      _/          _/                ',/
+     &8X,'    _/          _/    _/    _/      _/  _/                 ',/
+     &8X,'   _/          _/      _/  _/_/_/_/_/  _/                  ',/
+     &8X,'                                                           ',/
+     &8X,'        Program Preparing for Direct-Method Phasing        ',/
+     &8X,'                                                           ',/
+     &8X,'===========================================================',/
+     &8X,/,'</FONT>',/)
+
+C     SET UP INITIAL VALUES, READ PROGRAM PARAMETERS
+      PI=4.0*ATAN(1.0)
+      NREF=0
+      RHOMAX=0.0
+      RHOMIN=10000.0
+      DTOR=PI/180.0
+C     SET UP SIN/COS TABLE
+      DO 50 I=1,450
+      SINT(I)=SIN(DTOR*FLOAT(I-1))
+   50 CONTINUE
+C NAME OF THE WHOLE PACKAGE, TO BE PRINTED OUT ONLY WITH JOB REMARKS
+      WRITE(6,1)
+C KEYWORDS PROCESSING ROUTINE
+      CALL INPUT
+C NO. OF ATOMS IN ASU
+      ANAT=FLOAT(NAT)/(PTS*FLOAT((ICENT+1)*NSYM))
+      WRITE(6,370) ANAT
+  370 FORMAT(/1X,'Number of atoms in the asymmetric unit =',F9.2)
+      NASU=INT(ANAT+0.5)
+
+C MERGED AND SCALED (INCLUDING LOCAL SCALING) RAW DATA WERE INPUT. 
+      CALL DATAIN
+
+C REFINE OCCUPANCY AND TEMPERATURE FACTOR OF HEAVY ATOMS IF
+C THEY WERE NOT GIVEN
+      IF(IREFQB.EQ.1) CALL REFQB
+
+C NORMALIZED STRUCTURE-FACTOR MAGNITUDES OF NATIVE PROTEIN
+      CALL SHARPEN
+
+C OBTAIN THE DELTA PHI VALUES FROM DELTA F VALUES
+      CALL DF2DFI
+
+C OUTPUT PROCESSING FILE FOR PACKAGE "OSIGN"
+      CALL OSIGNDT
+
+C VACATE COMMON-REFLX TO PUT UP THE PROGRAM SIGN
+      DO 380 I=1,NUMB
+      LH(I)=0
+      LK(I)=0
+      LL(I)=0
+      FP(I)=0.0
+      SIGFP(I)=0.0
+      ID(I)=0
+      RHO(I)=0.0
+      DF(I)=0.0
+      SIGDF(I)=0.0
+      EP(I)=0.0
+      SIGEP(I)=0.0
+      BTP(I)=0.0
+      ITPH(I)=0
+      ED(I)=0.0
+      SIGED(I)=0.0
+      EDP(I)=0.0
+      SIGEDP(I)=0.0
+      FH(I)=0.0
+      XKP(I)=0.0
+      PHIP(I)=0.0
+      DELT(I)=0.0
+      SFJ2(I)=0.0
+      COSDP(I)=0.0
+      ESGM(I)=0.0
+  380 CONTINUE
+  
+      WRITE(6,400)
+  400 FORMAT(//,"ALL DONE WITH PREPAR....",//)
+      END
+C     -----------------------------------------------------------------
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C              IIIIIII  N     N  PPPPPP   U     U  TTTTTTT             C
+C                 I     NN    N  P     P  U     U     T                C
+C                 I     N N   N  P     P  U     U     T                C
+C                 I     N  N  N  PPPPPP   U     U     T                C
+C                 I     N   N N  P        U     U     T                C
+C                 I     N    NN  P        U     U     T                C
+C              IIIIIII  N     N  P         UUUUU      T                C
+C                                                                      C
+C                       FREE FORMAT INPUT ROUTINE                      C
+C                             VERSION  2011                            C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      SUBROUTINE INPUT
+      PARAMETER ( NKEY = 38 )
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON /CCP4_SYM/ NSYMM, MSYMP, NSPGRX, SPGRN, PGNAM, RSM, LTYPE
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+C     UNITS FOR INPUT/OUTPUT, TITLE, FLAGS, MAD/MIR
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      COMMON/HLFLAG/HL_FLAG
+      INTEGER HL_FLAG
+      REAL NCONST
+      CHARACTER N(80),LETT(26),LCASE(26),KX(10),KSP,KM,KD,KEQ,KP,KSC,
+     1          ITERM(4),NGS(26),M(80),ITLE
+      CHARACTER NTLE(80)
+      CHARACTER*1 LTYPE
+      CHARACTER*10 SPGRN,PGNAM
+      REAL RSM(4,4,192)
+      DIMENSION POP(10),NA(8),CR(9,10),KEYWRD(NKEY)
+      DIMENSION IDIV(20),IB(20)
+      DIMENSION NWP(8),NAP(8)
+      DATA LETT/'A','B','C','D','E','F','G','H','I','J','K','L','M',
+     1 'N','O','P','Q','R','S','T','U','V','W','X','Y','Z'/
+      DATA LCASE/'a','b','c','d','e','f','g','h','i','j','k','l',
+     1 'm','n','o','p','q','r','s','t','u','v','w','x','y','z'/
+      DATA KX/'0','1','2','3','4','5','6','7','8','9'/
+      DATA KSP/' '/,KM/'-'/,KD/'.'/
+      DATA KEQ/'='/,KP/'+'/,KSC/';'/
+      DATA ITERM/'H','K','L','N'/
+      DATA ANOM/0.0/,KMIN/0/,LIST/-1/,NSREQ/0/,JSKIP/0/,IDPHB/-1/,
+     1 IDLT/0/,ISEED/1/,INHA/0/,NKP/0/
+C-ISEED default 1; INHA default 0 (for SAD & SIR)
+C--------------------------------------------------------------------
+      DATA KEYWRD/1000,2000,3000,11415,11505,30512,31514,
+C-KEYWD                           ANO   AOE   CEL   CON
+     2  32503,41220,41318,51301,51309,52420,60103,
+C-KEYWD  CYC   DLT   DMR   EMA   EMI   EXT   FAC
+     3  60924,61513,61801,90402,111309,120305,120913,
+C-KEYWD  FIX   FOM   FRA   IDB    KMI    LCE    LIM
+     4  120919,130124,140609,140624,140801,140812,141623,
+C-KEYWD   LIS    MAX    NFI    NFX    NHA    NHL    NPW
+     5  141819,160809,160818,161519,190104,190504,190918,
+C-KEYWD   NRS    PHI    PHR    POS    SAD    SED    SIR
+     6  191109,192102,200920/
+C-KEYWD   SKI    SUB    TIT
+C     SET INITIAL AND DEFAULT VALUES
+      DO 10 I=1,NATM
+      X(I)=0.0
+      Y(I)=0.0
+      Z(I)=0.0
+      OCC(I)=1.0
+      BFAC(I)=0.0
+   10 CONTINUE
+      DO 20 I=1,20
+      IB(I)=0
+      IDIV(I)=0
+      IF(I.GT.10) GOTO 20
+      NINF(I)=0
+      IF(I.GT.8) GOTO 20
+      F2(I)=0.000
+      AL(I)=0.000
+      AS(I)=0.000
+      BL(I)=0.000
+      BS(I)=0.000
+      CL(I)=0.000
+      CS(I)=0.000
+      DL(I)=0.000
+      DS(I)=0.000
+      EL(I)=0.000
+      SCAL(I)=0.0
+      SC(I)=-1.0
+      NW(I)=0
+      NO(I)=0
+      BT(I)=-10.0
+      NWP(I)=0
+      NAP(I)=0
+   20 CONTINUE
+C     DEFAULT UNIT CELL CONTENT:
+C     ATOM --- CARBON. THE NUMBER OF WHICH IS TO BE ESTIMATED
+C     ACCORDING TO THE VOLUME OF UNIT CELL
+CF    NK=1
+CF    NW(1)=3
+CF    NA(1)=-100
+C     CALCULATE HL BY DEFAULT
+      HL_FLAG=0
+      ITPR=0
+      IND=1
+      NPWP=0
+      NTOT=0
+      NGP=0
+      NCYC=2
+C     NSYM=1
+      ISGM2=0
+      RHOCUT=1.0
+      EMAX=20.0
+      EMIN=0.0
+      IFIT=1
+      KFOM=0
+      NFIX=0
+      JFIX=0
+      JSUB=0
+C      ICOMP=0
+      IDTYPE=1
+      INCONST=0
+      AOES=0.5
+      IREFQB=1
+      RSL0=0.0
+   80 KS=1
+      READ(8,90) N
+   90 FORMAT(80A1)
+  100 KEY=0
+      IKW=0
+      IC=0
+      IMK=0
+      IM=1
+  110 DO 200 I=KS,80
+      DO 120 K=1,26
+      IF(LETT(K).EQ.N(I).OR.LCASE(K).EQ.N(I)) GOTO 190
+  120 CONTINUE
+      IF(IKW.EQ.0) GOTO 200
+      IF(IKW.LT.3.AND.N(I).EQ.KSP) GOTO 185
+      IF(IKW.LT.3) GOTO 6000
+      IF(IC.GT.20) GOTO 200
+      DO 130 K=1,10
+      IF(KX(K).EQ.N(I)) GOTO 180
+  130 CONTINUE
+      IF(N(I).EQ.KD) GOTO 170
+      IF(N(I).EQ.KM) GOTO 150
+      IM=1
+      IF(N(I).EQ.KSP) GOTO 160
+      GO TO 6000
+  150 IM=-1
+  160 IF(IMK.LE.0) IC=IC+1
+      IB(IC)=0
+      IDIV(IC)=0
+      IMK=1
+      GOTO 200
+  170 IMK=-1
+      GOTO 200
+  180 IB(IC)=IM*(10*IABS(IB(IC))+K-1)
+      IF(IMK.EQ.1) IMK=0
+      IF(IMK.LT.0) IDIV(IC)=IDIV(IC)-1
+      GOTO 200
+  185 GOTO (6000,6000,2100,2200,2300),IND
+  190 IF(IC.GT.0) GOTO 210
+      IF(IKW.GE.3) GOTO 200
+      IKW=IKW+1
+      KEY=100*KEY+K
+      IF(IKW.LT.3) GOTO 200
+C     TEST FOR TITLE OF KEYWORD FILE
+      IF(KEY.EQ.200920) GOTO 1665
+C     TEST FOR END OF KEYWORD FILE
+      IF(KEY.EQ.51404) GOTO 2800
+  200 CONTINUE
+      KS=1
+      READ(8,90) N
+      GOTO 110
+  210 KS=I
+      DO 250 II=1,NKEY
+      IF(KEY.NE.KEYWRD(II)) GOTO 250
+      GOTO (2150,2250,2350,460,470,610,630,
+C-KEYWD                    ANO AOE CEL CON
+     2       685,700,750,765,770,790,810,
+C-KEYWD      CYC DLT DMR EMA EMI EXT FAC
+     3       830,833,835,870,920,952,955,
+C-KEYWD      FIX FOM FRA IDB KMI LCE LIM
+     4       960,970,972,980,990,999,1310,
+C-KEYWD      LIS MAX NFI NFX NHA NHL  NPW
+     5      1330,1380,1437,1445,1600,1605,1610,
+C-KEY6D      NRS  PHI  PHR  POS  SAD  SED  SIR
+     6      1645,1660,1665), II
+C-KEYWD      SKI  SUB  TIT
+  250 CONTINUE
+      GOTO 6000
+  300 CONTINUE
+      ITPR=1
+      IREM=IB(1)
+      DO 340 I=1,IREM
+      READ(8,90) N
+      WRITE(6,330) N
+  330 FORMAT(50X,80A1)
+  340 CONTINUE
+      GOTO 80
+C                  *** KEYWORD PROCESSING ***
+C      *ANO*   IMAGINARY CORRECTION TO ANOMALOUS SCATTERING FACTORS
+  460 IND=5
+      ANOM=1.0
+      GOTO 100
+C      *AOE*  AVERAGE VALUE OF ESGMH
+  470 AOES=FLOAT(IB(1))*10.0**IDIV(1)
+      GOTO 100
+C      *CEL*   CELL DIMENSIONS
+  610 IF(IC.NE.7) GOTO 6000
+      DO 615 J=1,6
+      IF(NGP.EQ.0) CX(J)=FLOAT(IB(J))*10.0**IDIV(J)
+  615 CONTINUE
+      CALL INCELL(VOLUME)
+CF    IF(NA(1).LT.0) NA(1)=VOLUME*0.06023
+      GOTO 100
+C      *CON*   CONTENTS OF THE UNIT CELL
+  630 NK=0
+      IND=3
+      GOTO 100
+C      *CYC*   NUMBER OF CYCLES REQUESTED FOR THE ITERATION
+C              OF PROTEIN PHASE DETERMINATION
+  685 NCYC = IB(1)
+      GOTO 100
+C      *DLT*   SUBSTITUTE EXPERIMENT DELTA_PHI BY Sim'S WEIGHT PHASES
+  700 IDLT = 1
+      GOTO 100
+C      *DMR*   DIRECT METHODS MODIFYING MOLECULAR REPLACEMENT DATA 
+  750 IMR=MOD(IB(I),2)+1
+C     IMR=1,SIMULATE SAD MODE. F2(I)=2.0 FOR ALL PSEUDO-HEAVY ATOMS
+C     IMR=2,SIMULATE SIR MODE.
+      IF(IMR.NE.1) GOTO 758
+      DO 755 II=1,9
+      F2(II)=2.0
+  755 CONTINUE
+  758 IDTYPE=IMR+2
+      IDLT=1
+      IF(INHA.EQ.0) INHA=5
+      GOTO 100
+CC      *EMA*   MAXIMUM VALUE OF LARGEST E'S PASSED TO "PHASE"
+  765 EMAX=FLOAT(IB(1))*10.0**IDIV(1)
+      GOTO 100
+CC      *EMI*   MINIMUM VALUE OF LARGEST E'S PASSED TO "PHASE"
+  770 EMIN=FLOAT(IB(1))*10.0**IDIV(1)
+      GOTO 100
+C      *EXT*   STARTED RESOLUTION WHICH PHASE TO BE EXTENDED FROM
+  790 RSL0=FLOAT(IB(1))*10.0**IDIV(1)
+      GOTO 100
+C      *FAC*   ANALYTICAL CONSTANTS OF ATOMIC SCATTERING FACTORS
+  810 IND=5
+      GOTO 100
+C      *FIX*   ACCEPTED KNOWN PHASES AS STARTING REFL OF SIGN
+  830 JFIX=1
+      IF(NFIX.EQ.0) NFIX=10
+      GOTO 100
+C      *FOM*   FIT FOM(FIGURE OF MERIT) TO UNIFORM DISTRIBUTION
+  833 KFOM = 1
+      GOTO 100
+C       *FRA*
+  835 IND=4
+      GOTO 1710
+C      *IDB*   IDENTIFY DELTA-PHI-BEST VALUE
+C              (-1-- OLD(DEFAULT); 1-- CALCULATED; 2 --MIXED)
+  870 IDPHB = IB(1)
+      IF(IDPHB.EQ.0) IDPHB=1
+      GOTO 100
+C      *KMI*   MINIMUM KAPPA-VALUE ACCEPTED IN "PHASE"
+  920 KMIN = INT(100.0*FLOAT(IB(1))*10.0**IDIV(1))
+      GOTO 100
+C      *LCE*   LACK OF CLOSURE ERROR FOR PROTEIN DATA
+  952 NCONST=FLOAT(IB(1))*10.0**IDIV(1)
+      INCONST=1
+      GOTO 100
+C      *LIM*   RESOLUTION LIMIT FOR REFLECTIONS TO BE ACCEPTED(ANGSTROM)
+  955 ANSTR1=FLOAT(IB(1))*10.0**IDIV(1)
+      ANSTR2=FLOAT(IB(2))*10.0**IDIV(2)
+      IF(ANSTR1.GT.ANSTR2) GOTO 956
+      ANSTRT=ANSTR1
+      ANSTR1=ANSTR2
+      ANSTR2=ANSTRT
+  956 RHOLOW=1/(4*ANSTR1*ANSTR1)
+      RHOCUT=1/(4*ANSTR2*ANSTR2)
+      GOTO 100
+C      *LIS*   LIST REFLECTIONS IF REQUIRED
+  960 LIST = IB(1)
+C     LIST = 1   LIST ALL F(OBS) AND E'S
+C     LIST = 2   LIST ALL PHASE'S, FOM'S AND SO ON
+C     LIST = 3   LIST A FULL PARAMETERS IN DMR
+C     LIST = 0   LIST A FULL LIST(LIST 1 2 3)
+      GOTO 100
+CC      *MAX*   MAXIMUM NUMBER OF PHASE SETS TO BE GENERATED
+  970 NSREQ = IB(1)
+      GOTO 100
+C      *NFI*   NOT FIT PROTEIN PHASE DIFFERENCES TO A UNIFORM DISTRIBUTION
+  972 IFIT = 0
+      GOTO 100
+C      *NFX*   PERCENT OF KNOWN PHASES.
+  980 NFIX = IB(1)
+      GOTO 100
+C      *NHA*   PERCENT OF PARTIAL-STRUCTURE AS SIMULATE HEAVY ATOMS
+  990 IF(IB(1).LT.0.OR.IB(1).GT.100) THEN
+         call ccperr
+     +   (1,' ------ERROR IN NHA: ONLY 1%~100% WILL BE ALLOWED!------')
+      ELSE IF(IB(1).EQ.0) THEN
+C     INHA default value 5% for DMR
+         INHA=5
+      ELSE
+         INHA = IB(1)
+      END IF
+      GOTO 100
+C      *NHL*   DO NOT CALCULATE HL COEFFICENTS
+  999 HL_FLAG=1
+      GOTO 100
+C      *NPW*   NUMBER OF POINTS ON WILSON PLOT
+ 1310 NPWP=IB(1)
+      GOTO 100
+C      *NRS*   NUMBER OF RESIDUES IN THE ASYMMETRIC UNIT
+C       WHICH BE USED ESTIMATED CONTENTS
+ 1330 NRSDU=IB(1)
+      NK=0
+      DO 1350 IR=1,4
+      NK=IR
+      GOTO (1332,1334,1336,1338),NK
+C     FOR C
+ 1332 NW(NK)=3
+      FMULT=5.0
+      GOTO 1340
+C     FOR N
+ 1334 NW(NK)=14
+      FMULT=1.2
+      GOTO 1340
+C     FOR O
+ 1336 NW(NK)=15
+      FMULT=1.5
+      GOTO 1340
+C     FOR H
+ 1338 NW(NK)=8
+      FMULT=8.0
+ 1340 NA(NK)=NINT(FlOAT(NRSDU)*FMULT*NSYM*PTS*(ICENT+1))
+ 1350 CONTINUE
+      GOTO 100
+C      *PHI*  
+ 1380 ICOMP=1
+      GOTO 100
+C      *PHR*   PHASE RELATIONSHIPS ALREADY AVAILABLE
+ 1437 ISGM2 = 1
+      GOTO 100
+C      *POS*   POSITIONED MOLECULAR GROUP
+ 1445 IND=4
+      GOTO 1710
+C      *SAD*   SINGLE-WAVELENGTH ANOMALOUS DIFFRACTION
+ 1600 IDTYPE = 1
+      GOTO 100
+C      *SED* SEEDS OF RANDOM PROCEDURE
+ 1605 IF(IB(1).NE.0) ISEED=IB(1)
+      GOTO 100
+C      *SIR*   SINGLE ISOMORPHOUS REPLACEMENT
+ 1610 IDTYPE = 2
+      GOTO 100
+C      *SKI*   NUMBER OF SETS TO SKIP WHEN GENERATE RANDOM PHASE
+ 1645 JSKIP= IB(1)
+      GOTO 100
+C      *SUB*   SUBSTITUTING DPH WITH KNOWN PHASES
+ 1660 JSUB = 1
+      GOTO 100
+C      *TIT*   TITLE OF PROJECT
+ 1665 CONTINUE
+      DO I=1,80
+      NTLE(I)=KSP
+      END DO
+      DO 1666 I=1,80
+      IF(N(I).EQ.KSP) GOTO 1668
+ 1666 CONTINUE
+ 1668 KS=I+1
+      DO 1669 I=KS,80
+      NTLE(I-KS+1)=N(I)
+ 1669 CONTINUE
+      IL=80
+      IR=80
+      DO 1670 I=1,80
+      IF(NTLE(I).NE.KSP.AND.IL.EQ.80) IL=I-1
+      IF(NTLE(80-I+1).NE.KSP.AND.IR.EQ.80) IR=I-1
+ 1670 CONTINUE
+      IM=(IL+IR)/2
+      DO 1675 I=1,80
+      IF(I.LE.IM) ITLE(I)=KSP
+      IF(I.GT.IM) ITLE(I)=NTLE(IL+I-IM)
+ 1675 CONTINUE
+C     PRINT TITLE
+      WRITE(6,1680) ITLE
+ 1680 FORMAT(80A1/)
+C     PRINT SPACE GROUP & UNIT CELL
+      WRITE(6,1685) SPGRN, NSPGRX,(CX(I),I=1,6)
+ 1685 FORMAT('Space group:',1X,A10,9X,'No.',I4//
+     1 'Unit cell:',7X,'a =',F8.3,7X,'b =',F8.3,7X,
+     2 'c =',F8.3/13X,'alpha =',F7.2,5X,'beta =',F7.2,4X,'gamma =',F7.2)
+      GOTO 80
+ 1710 NGP=NGP+1
+      NINF(NGP)=IND
+      IND=4
+      NAG(NGP)=0
+      POP(NGP)=1.0
+C     SEARCH NEW ATOMS THEN ADD INTO CONTENTS
+      IF(NKP.EQ.0) GOTO 100
+      DO 1715 IP=1,NKP
+      NK=NK+IP
+      NW(NK)=NWP(IP)
+      NA(NK)=NINT(FlOAT(NAP(IP))*NSYM*PTS*(ICENT+1))
+ 1715 CONTINUE
+      NKP=0
+      GOTO 100
+ 2100 NK=NK+1
+      NW(NK)=KEY
+      KEY=1000
+      IKW=3
+      GOTO 110
+ 2150 NA(NK)=NINT(FlOAT(IB(1))*10.0**IDIV(1)*NSYM*PTS*(ICENT+1))
+      GOTO 100
+ 2200 NAG(NGP)=NAG(NGP)+1
+      NTOT=NTOT+1
+      DO 2210 I=1,NK
+      IF(KEY.EQ.NW(I)) GOTO 2230
+ 2210 CONTINUE
+      NKP=NKP+1
+      IF(NKP.EQ.1) GOTO 2216
+      DO 2212 IP=1,NKP
+      IF(KEY.EQ.NWP(IP)) GOTO 2214
+ 2212 CONTINUE
+      GOTO 2216
+ 2214 NKP=NKP-1
+      GOTO 2218
+ 2216 NWP(NKP)=KEY
+ 2218 NAP(NKP)=NAP(NKP)+1
+      NZ(NTOT)=NK+NKP
+      GOTO 2235
+ 2230 NZ(NTOT)=I
+ 2235 KEY=2000
+      IKW=3
+      GOTO 110
+ 2250 IF(IC.GT.2) X(NTOT)=FLOAT(IB(2))*10.0**IDIV(2)
+      IF(IC.GT.3) Y(NTOT)=FLOAT(IB(3))*10.0**IDIV(3)
+      IF(IC.GT.4) Z(NTOT)=FLOAT(IB(4))*10.0**IDIV(4)
+      IF(IC.GT.5) OCC(NTOT)=FLOAT(IB(5))*10.0**IDIV(5)
+      IF(IC.GT.6) BFAC(NTOT)=FLOAT(IB(6))*10.0**IDIV(6)
+      IF(NGP .EQ. 1 .AND. IC .GT. 6) IREFQB=0
+      IF(IC.LE.3) GOTO 100
+      DO 2270 J=1,8
+      BT(J)=0.0
+ 2270 CONTINUE
+      GOTO 100
+ 2300 DO 2310 JF=1,NK
+      IF(KEY.EQ.NW(JF)) GOTO 2320
+ 2310 CONTINUE
+      NKP=NKP+1
+      IF(NKP.LE.1) GOTO 2316
+      DO 2312 IP=1,NKP
+      IF(KEY.EQ.NWP(IP)) GOTO 2314
+ 2312 CONTINUE
+      GOTO 2316
+ 2314 NKP=NKP-1
+      GOTO 2318
+ 2316 NWP(NKP)=KEY
+ 2318 NAP(NKP)=NAP(NKP)+1
+      NZ(NTOT)=NK+NKP
+      GOTO 2320
+ 2320 KEY=3000
+      IKW=3
+      GOTO 110
+ 2350 IF(ANOM.LE.0.5) GOTO 2355
+      F2(JF)=FLOAT(IB(1))*10.0**IDIV(1)
+      GOTO 100
+ 2355 IF(IC.GT.1) AL(JF)=FLOAT(IB(1))*10.0**IDIV(1)
+      IF(IC.GT.2) AS(JF)=FLOAT(IB(2))*10.0**IDIV(2)
+      IF(IC.GT.3) BL(JF)=FLOAT(IB(3))*10.0**IDIV(3)
+      IF(IC.GT.4) BS(JF)=FLOAT(IB(4))*10.0**IDIV(4)
+      IF(IC.GT.5) CL(JF)=FLOAT(IB(5))*10.0**IDIV(5)
+      IF(IC.GT.6) CS(JF)=FLOAT(IB(6))*10.0**IDIV(6)
+      IF(IC.GT.7) DL(JF)=FLOAT(IB(7))*10.0**IDIV(7)
+      IF(IC.GT.8) DS(JF)=FLOAT(IB(8))*10.0**IDIV(8)
+      IF(IC.GT.9) EL(JF)=FLOAT(IB(9))*10.0**IDIV(9)
+      IF(IC.GT.10) GOTO 6000
+      GOTO 100
+C     END OF KEYWORD FILE
+ 2800 CONTINUE
+C     SEARCH NEW ATOMS THEN ADD INTO CONTENTS
+      IF(NKP.EQ.0) GOTO 2803
+      DO 2802 IP=1,NKP
+      NK=NK+IP
+      NW(NK)=NWP(IP)
+      NA(NK)=NINT(FlOAT(NAP(IP))*NSYM*PTS*(ICENT+1))
+ 2802 CONTINUE
+      NKP=0
+C     CALCULATE ATOMIC SCATTERING FACTORS
+ 2803 CALL ATMCOEF
+      NAT=0
+      DO 2805 L=1,80
+      M(L)=KSP
+ 2805 CONTINUE
+      DO 2810 L=1,NK
+      K=NW(L)/100
+      J=NW(L)-100*K
+      IF (K.GT.0) M(L)=LETT(K)
+      IF (J.GT.0) M(L+40)=LETT(J)
+      NW(L)=NA(L)
+      NA(L)=0
+      NO(L)=INT(AL(L)+BL(L)+CL(L)+DL(L)+EL(L)+0.5)
+C      IF(NO(L).NE.1.OR.IDTYPE.EQ.1) NAT=NAT+NA(L)
+      IF(NO(L).NE.1) NAT=NAT+NW(L)
+ 2810 CONTINUE
+      WRITE(6,2824) (M(L),M(L+40),NW(L),NO(L),L=1,NK)
+ 2824 FORMAT(/'Unit cell contents:'/
+     1        22X,'Atom',3X,'Number in cell',2X,'Atomic number'/
+     2        (24X,2A1,4X,I10,9X,I3))
+      WRITE(6,2825) (M(L),M(L+40),
+     1 AL(L),AS(L),BL(L),BS(L),CL(L),CS(L),DL(L),DS(L),EL(L),L=1,NK)
+ 2825 FORMAT(/1X,'Scattering factor constants:'//6X,'F=',
+     1 'AA*EXP(-A*RHO)+BB*EXP(-B*RHO)+CC*EXP(-C*RHO)+DD*EXP(-D*RHO)+E'/ 
+     2 /7X,'AA       A      BB       B      CC       C      DD       D',
+     3 '       E'/ (2A1,9F8.3))
+      IF(ANOM.LT.0.5) GOTO 2829
+      WRITE(6,2826)
+ 2826 FORMAT(/,1X,'IMAGINARY PART OF THE ATOMIC SCATTERING FACTORS')
+      DO 2828 L=1,NK
+      IF(F2(L).GT.0.001) WRITE(6,2827) M(L),M(L+40),F2(L)
+ 2827 FORMAT(1X,2A1,8X,F8.3)
+ 2828 CONTINUE
+ 2829 DO 2830 L=1,142
+      GIS(L)=0.0
+      GIS2(L)=0.0
+ 2830 CONTINUE
+      IF(NGP.EQ.0) GOTO 2880
+      NF=0
+C     RANDOMLY SELECT ATOMS PROGRAM
+      IF(NGP.EQ.1.AND.IDTYPE.GE.3.AND.INHA.NE.0) THEN
+      IXRAN=1
+      IYRAN=1
+      NPATM=NAG(1)
+      MRSKIP=ISEED-1 
+        IF(MRSKIP.NE.0) THEN
+          DO NR=1,MRSKIP
+            DO NM=1,NPATM
+                ARTEMP=RRAND(IXRAN,IYRAN)
+            ENDDO
+          ENDDO
+        ENDIF
+      WRITE(6,2832) IDTYPE
+ 2832 FORMAT(/'Calculation mode:',I4)
+      WRITE(6,2833) NAG(1)
+ 2833 FORMAT(/'Number of atoms in the partial structure:',I8)
+      WRITE(6,2834) INHA
+ 2834 FORMAT('Percentage of pseudo heavy atoms randomly selected ',
+     1 'in the current model:',I4)
+      WRITE(6,2836) ISEED,IXRAN,IYRAN
+ 2836 FORMAT('Assigned phase set and Initial value of IX-IY:',3I9)
+      NGP=2
+Ch    NHEAVY=MAX0(15,INT(NAG(1)*0.01*INHA))
+      NHEAVY=NINT(NAG(1)*0.01*INHA)
+      WRITE(6,2837) NHEAVY
+ 2837 FORMAT('Number of pseudo heavy atoms in the asymmetric unit:',I6)
+      NAG(2)=NAG(1)
+      NAG(1)=NHEAVY
+      NINF(2)=NINF(1)
+      IF(LIST.NE.3.AND.LIST.NE.0) GOTO 2842
+      WRITE(6,2838) NAG(1),NAG(2)
+ 2838 FORMAT('NAG_1=',I5,3X,'NAG_2=',I5)
+      WRITE(6,2839) NAG(1)
+ 2839 FORMAT('MOVE THE TOP',I5,' ATOMS TO THE BOTTOM')
+ 2842 DO I=1, NAG(1)
+      IF(LIST.EQ.3.OR.LIST.EQ.0) WRITE(6,2844) I,I+NAG(2)
+ 2844 FORMAT(2X,I5,3X,'MOVED TO',I5)
+         X(I+NAG(2))=X(I)
+         Y(I+NAG(2))=Y(I)
+         Z(I+NAG(2))=Z(I)
+         NZ(I+NAG(2))=NZ(I)
+         OCC(I+NAG(2))=OCC(I)
+         BFAC(I+NAG(2))=BFAC(I)
+      END DO
+      NAG(2)=NAG(2)-NAG(1)
+      IF(LIST.NE.3.AND.LIST.NE.0) GOTO 2846
+      WRITE(6,2845)
+ 2845 FORMAT(/'RANDOMLY SELECT ATOMS FROM PARTIAL STRUCTURE'
+     1 ' AS HEAVY-ATOMS')
+ 2846 DO I=1,NAG(1)
+      IRAN=INT(RRAND(IXRAN,IYRAN)*(NAG(1)+NAG(2)-I))+1
+      IF(LIST.NE.3.AND.LIST.NE.0) GOTO 2850
+Che   WRITE(6,2849) I,NAG(1)+NAG(2)+1-I,IRAN,I,(NAG(1)+IRAN),
+Che  1 (NAG(1)+IRAN),2*NAG(1)+NAG(2)+1-I
+Che 2849 FORMAT(I5,2X,'RANDOM FROM 1 TO',I5,15X,'IRAN=',I5,15X,'NO.',I5,
+Cke  1 ' SELECT NO.',I5,15X,'NO.',I5,' REPLACED BY NO.',I5)
+      IF(I.EQ.1) WRITE(6,2847)
+ 2847 FORMAT(2X,'No. of pseudo HA',5X,'NO. of partial structure')
+      WRITE(6,2848) I,IRAN
+ 2848 FORMAT(6X,I5,20X,I5)
+ 2850    X(I)=X(NAG(1)+IRAN)
+         Y(I)=Y(NAG(1)+IRAN)
+         Z(I)=Z(NAG(1)+IRAN)
+         NZ(I)=NZ(NAG(1)+IRAN)
+         OCC(I)=OCC(NAG(1)+IRAN)
+         BFAC(I)=BFAC(NAG(1)+IRAN)
+         X(NAG(1)+IRAN)=X(2*NAG(1)+NAG(2)+1-I)
+         Y(NAG(1)+IRAN)=Y(2*NAG(1)+NAG(2)+1-I)
+         Z(NAG(1)+IRAN)=Z(2*NAG(1)+NAG(2)+1-I)
+         NZ(NAG(1)+IRAN)=NZ(2*NAG(1)+NAG(2)+1-I)
+         OCC(NAG(1)+IRAN)=OCC(2*NAG(1)+NAG(2)+1-I)
+         BFAC(NAG(1)+IRAN)=BFAC(2*NAG(1)+NAG(2)+1-I)
+      END DO
+      END IF
+      DO 2870 L=1,NGP
+      NS=NF+1
+      NF=NF+NAG(L)
+      IF (NINF(L).EQ.4) THEN
+        IF (L.EQ.1.AND.IDTYPE.LT.3) WRITE(6,2852)
+ 2852 FORMAT(/1X,'HEAVY ATOM COORDINATES:',//,
+     & 4X,'NO.  ATOM      X         Y         Z        Occ       B',/,
+     &2X,'------------------------------------------------------------')
+      END IF
+      DO 2860 J=NS,NF
+      K=NZ(J)
+      IF(NINF(L).LE.2) NA(K)=NA(K)-INT(POP(L)+0.5)
+      IF(NINF(L).EQ.4) GOTO 2856
+      WRITE(6,2854) M(K),M(K+40),X(J),Y(J),Z(J)
+ 2854 FORMAT(' ',9X,2A1,3F15.4)
+      GOTO 2860
+ 2856 NA(K)=NA(K)+INT(NSYM*(ICENT+1)*OCC(J)*PTS+0.5)
+      IF(NA(K).LT.0) NA(K)=0
+      IF(L.EQ.1.AND.IDTYPE.LT.3) WRITE(6,2858) J,M(K),M(K+40),X(J),
+     1 Y(J),Z(J),OCC(J),BFAC(J)
+ 2858 FORMAT(' ',I6,3X,2A1,5F10.4)
+ 2860 CONTINUE
+ 2870 CONTINUE
+C     CALCULATE WILSON (GIW) AND DEBYE (GIS) SCATTERING FACTORS
+ 2880 DO 2900 L=1,142
+      T=0.01*FLOAT(L-1)
+      TT=T*T
+      GIW(L)=0.0
+      DO 2890 J=1,NK
+C      IF(IDTYPE.EQ.1) FZ=F2(J)
+C      IF(IDTYPE.NE.1) 
+       FZ=AL(J)*EXP(-AS(J)*TT)+BL(J)*EXP(-BS(J)*TT)
+     1 +CL(J)*EXP(-CS(J)*TT)+DL(J)*EXP(-DS(J)*TT)+EL(J)
+      GIS2(L)=GIS2(L)+F2(J)*F2(J)*FLOAT(NA(J))
+      GIS(L)=GIS(L)+FZ*FZ*FLOAT(NA(J))
+      GIW(L)=GIW(L)+FZ*FZ*FLOAT(NW(J))
+ 2890 CONTINUE
+ 2900 CONTINUE
+ 5000 II=0
+      RETURN
+C     OUTPUT ERROR LINE
+ 6000 WRITE(6,6010) N
+ 6010 FORMAT(//,'***************************',/,
+     1          '   ERROR IN LINE',5X,80A1,/,
+     2          '***************************',//)
+      END
+C     -----------------------------------------------------------------
+      FUNCTION NH(ICH)
+      DIMENSION NCH(31)
+      CHARACTER H(31),ICH
+      DATA H/' ','-','/','0','1','2','3','4','5','6','A','B','C','I','R'
+     * ,'F','P','D','M','N','Y',':','E','U','O','G','Q','T','L','H','X'/
+C    THOSE DIGITAL NUMBER BELOW ARE ASCII CODES FOR EACH CHARACTER ABOVE
+      DATA NCH/ 32,45,47,48,49,50,51,52,53,54,65,66,67,73,82,
+     *         70,80,68,77,78,89,58,69,85,79,71,81,84,76,72,88/
+      DO 200 I=1,31
+      IF (ICH.EQ.H(I)) GO TO 300
+ 200  CONTINUE
+      NH=0
+      RETURN
+ 300  NH=NCH(I)
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE                 VOL(CX,V)
+C       SINE AND COSINE OF CELL ANGLES PLUS TRIGONOMETRIC PART OF VOLUME
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      REAL NCONST
+      CHARACTER ITLE
+      DIMENSION CX(9)
+      DTOR=PI/180.0
+      ARG=1.0
+      DO 10 I=4,6
+      CX(I+3)=SIN(DTOR*CX(I))
+      CX(I)=COS(DTOR*CX(I))
+      ARG=ARG-CX(I)*CX(I)
+   10 CONTINUE
+      V=SQRT(ARG+2.0*CX(4)*CX(5)*CX(6))
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE                   ATMCOEF
+C             CALCULATE SPHERICAL SCATTERING FACTOR COEFFICIENTS
+C          ATOMIC SCATTERING FACTOR COEFFICIENTS FOR 98 ATOM TYPES 
+C            F = AL * EXP(-AS * RHO) + BL * EXP(-BS * RHO)
+C              + CL * EXP(-CS * RHO) + DL * EXP(-DS * RHO) + EL
+C
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)
+      DIMENSION ALT(98),AST(98),BLT(98),BST(98),ELT(98),NT(98)
+      DIMENSION CLT(98),CST(98),DLT(98),DST(98)
+      DATA NT/ 8,805,1209,205, 2, 3, 14, 15, 6,1405,1401,1307,112,1909,
+     1  16,  19, 312,118, 11, 301,1903,2009, 22, 318,1314,605,315,1409,
+     2 321,2614, 701,705,119,1905,218,1118,1802,1918,25,2618,1402,1315,
+     3 2003,1821,1808,1604, 107,304,914,1914,1902,2005, 9,2405,319,201,
+     4 1201,305,1618,1404,1613,1913,521,704,2002,425,815,518,2013,2502,
+     5 1221,806,2001, 23,1805,1519,918,1620,121,807,2012,1602,209,1615,
+     6 120,1814,618,1801, 103,2008,1601, 21,1416,1621,113,313, 211,306/
+      DATA ALT/0.489918,0.873400, 1.128200,   1.591900,   2.054500,
+     9    2.310000,  12.212600,   3.048500,   3.539200,   3.955300,
+     9    4.762600,   5.420400,   6.420200,   6.291500,   6.434500,
+     9    6.905300,  11.460400,   7.484500,   8.218600,   8.626600,
+     9    9.189000,   9.759500,  10.297100,  10.640600,  11.281900,
+     9   11.769500,  12.284100,  12.837600,  13.338000,  14.074300,
+     9   15.235400,  16.081600,  16.672300,  17.000601,  17.178900,
+     9   17.355499,  17.178400,  17.566299,  17.775999,  17.876499,
+     9   17.614201,   3.702500,  19.130100,  19.267401,  19.295700,
+     9   19.331900,  19.280800,  19.221399,  19.162399,  19.188900,
+     9   19.641800,  19.964399,  20.147200,  20.293301,  20.389200,
+     9   20.336100,  20.577999,  21.167101,  22.044001,  22.684500,
+     9   23.340500,  24.004200,  24.627399,  25.070900,  25.897600,
+     9   26.507000,  26.904900,  27.656300,  28.181900,  28.664101,
+     9   28.947599,  29.143999,  29.202400,  29.081800,  28.762100,
+     9   28.189400,  27.304899,  27.005899,  16.881901,  20.680901,
+     9   27.544600,  31.061701,  33.368900,  34.672600,  35.316299,
+     9   35.563099,  35.929901,  35.763000,  35.659698,  35.564499,
+     9   35.884701,  36.022800,  36.187401,  36.525398,  36.670601,
+     9   36.648800,  36.788101,  36.918499/
+      DATA AST/20.659300,9.103700,3.954600,  43.642700,  23.218500,
+     9   20.843901,   0.005700,  13.277100,  10.282500,   8.404200,
+     9    3.285000,   2.827500,   3.038700,   2.438600,   1.906700,
+     9    1.467900,   0.010400,   0.907200,  12.794900,  10.442100,
+     9    9.021300,   7.850800,   6.865700,   6.103800,   5.340900,
+     9    4.761100,   4.279100,   3.878500,   3.582800,   3.265500,
+     9    3.066900,   2.850900,   2.634500,   2.409800,   2.172300,
+     9    1.938400,   1.788800,   1.556400,   1.402900,   1.276180,
+     9    1.188650,   0.277200,   0.864132,   0.808520,   0.751536,
+     9    0.698655,   0.644600,   0.594600,   0.547600,   5.830300,
+     9    5.303400,   4.817420,   4.347000,   3.928200,   3.569000,
+     9    3.216000,   2.948170,   2.812190,   2.773930,   2.662480,
+     9    2.562700,   2.472740,   2.387900,   2.253410,   2.242560,
+     9    2.180200,   2.070510,   2.073560,   2.028590,   1.988900,
+     9    1.901820,   1.832620,   1.773330,   1.720290,   1.671910,
+     9    1.629030,   1.592790,   1.512930,   0.461100,   0.545000,
+     9    0.655150,   0.690200,   0.704000,   0.700999,   0.685870,
+     9    0.663100,   0.646453,   0.616341,   0.589092,   0.563359,
+     9    0.547751,   0.529300,   0.511929,   0.499384,   0.483629,
+     9    0.465154,   0.451018,   0.437533/
+      DATA BLT/0.262003,0.630900, 0.750800,   1.127800,   1.332600,
+     9    1.020000,   3.132200,   2.286800,   2.641200,   3.112500,
+     9    3.173600,   2.173500,   1.900200,   3.035300,   4.179100,
+     9    5.203400,   7.196400,   6.772300,   7.439800,   7.387300,
+     9    7.367900,   7.355800,   7.351100,   7.353700,   7.357300,
+     9    7.357300,   7.340900,   7.292000,   7.167600,   7.031800,
+     9    6.700600,   6.374700,   6.070100,   5.819600,   5.235800,
+     9    6.728600,   9.643500,   9.818400,  10.294600,  10.948000,
+     9   12.014400,  17.235600,  11.094800,  12.918200,  14.350100,
+     9   15.501700,  16.688499,  17.644400,  18.559601,  19.100500,
+     9   19.045500,  19.013800,  18.994900,  19.029800,  19.106199,
+     9   19.297001,  19.599001,  19.769501,  19.669701,  19.684700,
+     9   19.609501,  19.425800,  19.088600,  19.079800,  18.218500,
+     9   17.638300,  17.294001,  16.428499,  15.885100,  15.434500,
+     9   15.220800,  15.172600,  15.229300,  15.430000,  15.718900,
+     9   16.155001,  16.729601,  17.763901,  18.591299,  19.041700,
+     9   19.158400,  13.063700,  12.951000,  15.473300,  19.021099,
+     9   21.281601,  23.054701,  22.906401,  23.103201,  23.421900,
+     9   23.294800,  23.412800,  23.596399,  23.808300,  24.099199,
+     9   24.409599,  24.773600,  25.199499/
+      DATA BST/7.740390,3.356800, 1.052400,   1.862300,   1.021000,
+     9   10.207500,   9.893300,   5.701100,   4.294400,   3.426200,
+     9    8.842200,  79.261101,   0.742600,  32.333698,  27.157000,
+     9   22.215099,   1.166200,  14.840700,   0.774800,   0.659900,
+     9    0.572900,   0.500000,   0.438500,   0.392000,   0.343200,
+     9    0.307200,   0.278400,   0.256500,   0.247000,   0.233300,
+     9    0.241200,   0.251600,   0.264700,   0.272600,  16.579599,
+     9   16.562300,  17.315100,  14.098800,  12.800600,  11.916000,
+     9   11.766000,   1.095800,   8.144870,   8.434670,   8.217580,
+     9    7.989290,   7.472600,   6.908900,   6.377600,   0.503100,
+     9    0.460700,   0.420885,   0.381400,   0.344000,   0.310700,
+     9    0.275600,   0.244475,   0.226836,   0.222087,   0.210628,
+     9    0.202088,   0.196451,   0.194200,   0.181951,   0.196143,
+     9    0.202172,   0.197940,   0.223545,   0.238849,   0.257119,
+     9    9.985190,   9.599900,   9.370460,   9.225900,   9.092270,
+     9    8.979480,   8.865530,   8.811740,   8.621600,   8.448400,
+     9    8.707510,   2.357600,   2.923800,   3.550780,   3.974580,
+     9    4.069100,   4.176190,   3.871350,   3.651550,   3.462040,
+     9    3.415190,   3.325300,   3.253960,   3.263710,   3.206470,
+     9    3.089970,   3.046190,   3.007750/
+      DATA CLT/0.196767,0.311200, 0.617500,   0.539100,   1.097900,
+     9    1.588600,   2.012500,   1.546300,   1.517000,   1.454600,
+     9    1.267400,   1.226900,   1.593600,   1.989100,   1.780000,
+     9    1.437900,   6.255600,   0.653900,   1.051900,   1.589900,
+     9    1.640900,   1.699100,   2.070300,   3.324000,   3.019300,
+     9    3.522200,   4.003400,   4.443800,   5.615800,   5.165200,
+     9    4.359100,   3.706800,   3.431300,   3.973100,   5.637700,
+     9    5.549300,   5.139900,   5.422000,   5.726290,   5.417320,
+     9    4.041830,  12.887600,   4.649010,   4.863370,   4.734250,
+     9    5.295370,   4.804500,   4.461000,   4.294800,   4.458500,
+     9    5.037100,   6.144870,   7.513800,   8.976700,  10.662000,
+     9   10.888000,  11.372700,  11.851300,  12.385600,  12.774000,
+     9   13.123500,  13.439600,  13.760300,  13.851800,  14.316700,
+     9   14.559600,  14.558300,  14.977900,  15.154200,  15.308700,
+     9   15.100000,  14.758600,  14.513500,  14.432700,  14.556400,
+     9   14.930500,  15.611500,  15.713100,  25.558201,  21.657499,
+     9   15.538000,  18.441999,  16.587700,  13.113800,   9.498870,
+     9    8.003700,  12.143900,  12.473900,  12.597700,  12.747300,
+     9   14.189100,  14.949100,  15.640200,  16.770700,  17.341499,
+     9   17.399000,  17.891899,  18.331699/
+      DATA CST/49.551899,22.927601,85.390503,103.483002, 60.349800,
+     9    0.568700,  28.997499,   0.323900,   0.261500,   0.230600,
+     9    0.313600,   0.380800,  31.547199,   0.678500,   0.526000,
+     9    0.253600,  18.519400,  43.898300, 213.186996,  85.748398,
+     9  136.108002,  35.633801,  26.893801,  20.262600,  17.867399,
+     9   15.353500,  13.535900,  12.176300,  11.396600,  10.316300,
+     9   10.780500,  11.446800,  12.947900,  15.237200,   0.260900,
+     9    0.226100,   0.274800,   0.166400,   0.125599,   0.117622,
+     9    0.204785,  11.004000,  21.570700,  24.799700,  25.874901,
+     9   25.205200,  24.660500,  24.700800,  25.849899,  26.890900,
+     9   27.907400,  28.528400,  27.766001,  26.465900,  24.387899,
+     9   20.207300,  18.772600,  17.608299,  16.766899,  15.885000,
+     9   15.100900,  14.399600,  13.754600,  12.933100,  12.664800,
+     9   12.189900,  11.440700,  11.360400,  10.997500,  10.664700,
+     9    0.261033,   0.275116,   0.295977,   0.321703,   0.350500,
+     9    0.382661,   0.417916,   0.424593,   1.482600,   1.572900,
+     9    1.963470,   8.618000,   8.793700,   9.556420,  11.382400,
+     9   14.042200,  23.105200,  19.988701,  18.599001,  17.830900,
+     9   16.923500,  16.092699,  15.362200,  14.945500,  14.313600,
+     9   13.434600,  12.894600,  12.404400/
+      DATA DLT/0.049879,0.178000, 0.465300,   0.702900,   0.706800,
+     9    0.865000,   1.166300,   0.867000,   1.024300,   1.125100,
+     9    1.112800,   2.307300,   1.964600,   1.541000,   1.490800,
+     9    1.586300,   1.645500,   1.644200,   0.865900,   1.021100,
+     9    1.468000,   1.902100,   2.057100,   1.492200,   2.244100,
+     9    2.304500,   2.348800,   2.380000,   1.673500,   2.410000,
+     9    2.962300,   3.683000,   4.277900,   4.354300,   3.985100,
+     9    3.537500,   1.529200,   2.669400,   3.265880,   3.657210,
+     9    3.533460,   3.742900,   2.712630,   1.567560,   1.289180,
+     9    0.605844,   1.046300,   1.602900,   2.039600,   2.466300,
+     9    2.682700,   2.523900,   2.273500,   1.990000,   1.495300,
+     9    2.695900,   3.287190,   3.330490,   2.824280,   2.851370,
+     9    2.875160,   2.896040,   2.922700,   3.545450,   2.953540,
+     9    2.965770,   3.638370,   2.982330,   2.987060,   2.989630,
+     9    3.716010,   4.300130,   4.764920,   5.119820,   5.441740,
+     9    5.675890,   5.833770,   5.783700,   5.860000,   5.967600,
+     9    5.525930,   5.969600,   6.469200,   7.025880,   7.425180,
+     9    7.443300,   2.112530,   3.210970,   4.086550,   4.807030,
+     9    4.172870,   4.188000,   4.185500,   3.479470,   3.493310,
+     9    4.216650,   4.232840,   4.243910/
+      DATA DST/2.201590,0.982100,168.261002,  0.542000,   0.140300,
+     9   51.651199,   0.582600,  32.908901,  26.147600,  21.718399,
+     9  129.423996,   7.193700,  85.088600,  81.693703,  68.164497,
+     9   56.172001,  47.778400,  33.392899,  41.684101, 178.436996,
+     9   51.353100, 116.105003, 102.477997,  98.739899,  83.754303,
+     9   76.880501,  71.169197,  66.342102,  64.812599,  58.709702,
+     9   61.413502,  54.762501,  47.797199,  43.816299,  41.432800,
+     9   39.397202, 164.934006, 132.376007, 104.353996,  87.662697,
+     9   69.795700,  61.658401,  86.847198,  94.292801,  98.606201,
+     9   76.898598,  99.815598,  87.482498,  92.802902,  83.957100,
+     9   75.282501,  70.840302,  66.877602,  64.265800, 213.904007,
+     9  167.201996, 133.123993, 127.112999, 143.643997, 137.903000,
+     9  132.720993, 128.007004, 123.174004, 101.398003, 115.362000,
+     9  111.874001,  92.656601, 105.703003, 102.960999, 100.417000,
+     9   84.329803,  72.028999,  63.364399,  57.056000,  52.086102,
+     9   48.164700,  45.001099,  38.610298,  36.395599,  38.324600,
+     9   45.814899,  47.257900,  48.009300,  47.004501,  45.471500,
+     9   44.247299, 150.645004, 142.324997, 117.019997,  99.172203,
+     9  105.250999, 100.612999,  97.490799, 105.980003, 102.273003,
+     9   88.483398,  86.002998,  83.788101/
+      DATA ELT/0.001305,0.006400, 0.037700,   0.038500,  -0.193200,
+     9    0.215600, -11.529000,   0.250800,   0.277600,   0.351500,
+     9    0.676000,   0.858400,   1.115100,   1.140700,   1.114900,
+     9    0.866900,  -9.557400,   1.444500,   1.422800,   1.375100,
+     9    1.332900,   1.280700,   1.219900,   1.183200,   1.089600,
+     9    1.036900,   1.011800,   1.034100,   1.191000,   1.304100,
+     9    1.718900,   2.131300,   2.531000,   2.840900,   2.955700,
+     9    2.825000,   3.487300,   2.506400,   1.912130,   2.069290,
+     9    3.755910,   4.387500,   5.404280,   5.378740,   5.328000,
+     9    5.265930,   5.179000,   5.069400,   4.939100,   4.782100,
+     9    4.590900,   4.352000,   4.071200,   3.711800,   3.335200,
+     9    2.773100,   2.146780,   1.862640,   2.058300,   1.984860,
+     9    2.028760,   2.209630,   2.574500,   2.419600,   3.583240,
+     9    4.297280,   4.567960,   5.920460,   6.756210,   7.566720,
+     9    7.976280,   8.581540,   9.243540,   9.887500,  10.472000,
+     9   11.000500,  11.472200,  11.688300,  12.065800,  12.608900,
+     9   13.174600,  13.411800,  13.578200,  13.677000,  13.710800,
+     9   13.690500,  13.724700,  13.621100,  13.526600,  13.431400,
+     9   13.428700,  13.396600,  13.357300,  13.381200,  13.359200,
+     9   13.288700,  13.275400,  13.267400/
+      DO 150 I=1,NK
+C     CHECK ATOM TYPE
+      DO 120 J=1,98
+      IF (NW(I).NE.NT(J)) GO TO 120
+      NO(I)=J
+C     TEST IF THE PARAMETERS HAVE BEEN INPUT BY USER IN A KEYWORD FILE
+      TEST=AL(I)+BL(I)+CL(I)+ABS(DL(I))+ABS(EL(I))
+      IF (TEST.GT.0.001) GO TO 120
+      AS(I)=AST(J)
+      AL(I)=ALT(J)
+      BS(I)=BST(J)
+      BL(I)=BLT(J)
+      CL(I)=CLT(J)
+      CS(I)=CST(J)
+      DL(I)=DLT(J)
+      DS(I)=DST(J)
+      EL(I)=ELT(J)
+  120 CONTINUE
+  150 CONTINUE
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE              INCELL(VOLUME)
+C     INPUT UNIT CELL PARAMETERS AND CALCULATE RECIPROCAL PARAMETERS
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      CHARACTER ITLE
+      CALL VOL(CX,V)
+C     VOLUME AND RECIPROCAL CELL FUNCTIONS
+      V=1.0/(V*CX(1)*CX(2)*CX(3))
+      VOLUME=1.0/V
+      P(1)=CX(2)*CX(3)*CX(7)*V
+      P(2)=CX(1)*CX(3)*CX(8)*V
+      P(3)=CX(1)*CX(2)*CX(9)*V
+      P(4)=0.5*P(1)*P(2)*(CX(4)*CX(5)-CX(6))/(CX(7)*CX(8))
+      P(5)=0.5*P(1)*P(3)*(CX(4)*CX(6)-CX(5))/(CX(7)*CX(9))
+      P(6)=0.5*P(2)*P(3)*(CX(5)*CX(6)-CX(4))/(CX(8)*CX(9))
+      DO 40 I=1,3
+      P(I)=0.25*P(I)*P(I)
+      CX(I+3)=180.0*ATAN2(CX(I+6),CX(I+3))/PI
+   40 CONTINUE
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE                DATAIN
+C                      READ REFLECTIONS FROM DATA FILE
+      PARAMETER ( NREFL = 800000 )
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      DIMENSION KL3(24),I1(3),I2(3)
+      DIMENSION JSIGN(24),T(24)
+      CHARACTER ITLE
+      PI=4.0*ATAN(1.0)
+      DTOR=PI/180.0
+      K=0
+   10 CONTINUE
+      IF(ICOMP.EQ.0) READ(9,20,END=400) KH,KK,KL,F0,SF0,DF0,SDF0
+      IF(ICOMP.EQ.1) READ(9,30,END=400) KH,KK,KL,F0,SF0,DF0,SDF0,PHAIN
+   20 FORMAT(I5,2I4,2X,4F13.4)
+   30 FORMAT(I5,2I4,2X,5F13.4)
+C     GENERATE  SYMMETRY  RELATED  REFLECTIONS AND FIND STANDARD ONE.
+      CALL STANDARD(KH,KK,KL,PHAIN,KH2,KK2,KL2,PHAIN2,IDT)
+      K=K+1
+      LH(K)=KH2
+      LK(K)=KK2
+      LL(K)=KL2
+      FP(K)=F0
+      SIGFP(K)=SF0
+      DF(K)=DF0
+      SIGDF(K)=SDF0
+      IF(MOD(IDTYPE,2).EQ.1) DF(K)=IDT*DF0
+      IF(ICOMP.GT.0) ITPH(K)=NINT(PHAIN2)
+      RHO(K)=P(1)*FLOAT(LH(K)*LH(K))+P(2)*FLOAT(LK(K)*LK(K))
+     1      +P(3)*FLOAT(LL(K)*LL(K))+P(4)*FLOAT(LH(K)*LK(K))
+     2      +P(5)*FLOAT(LH(K)*LL(K))+P(6)*FLOAT(LK(K)*LL(K))
+C4-0  IF( RHO(K) .GT. RHOCUT ) THEN
+      IF(RHO(K).GT.RHOCUT.OR.RHO(K).LT.RHOLOW) THEN
+        K=K-1
+        GOTO 10
+      ENDIF
+C     DATA TOO BIG
+      IF(K.GT.800000) THEN
+      WRITE(6,35)
+   35 FORMAT(//1X,
+     1 '*********************************************************',//
+     2 ' Sorry, OASIS-4 does not accept more than 800k reflections.',/
+     3 ' You may cut the data to a lower resolution limit',/
+     4 '  or delete reflections with lowest intensities.',//
+     5 '********************************************************',//)
+      REWIND(9)
+      STOP
+      ENDIF
+      RHOMAX=AMAX1(RHOMAX,RHO(K))
+      RHOMIN=AMIN1(RHOMIN,RHO(K))
+C     COMPUTE EPSILON AND MULTIPLICITY BY GENERATING EQUIVALENT
+C     REFLECTIONS
+C     EPSILON = NUMBER OF TIMES SAME REFLECTION APPEARS IN LIST
+C     MULTIPLICITY = NUMBER DIFFERENT REFLECTIONS IN LIST
+      EPS=1.0
+      MULT=1
+      I1(1)=LH(K)
+      I1(2)=LK(K)
+      I1(3)=LL(K)
+C     IN TRICLINIC SPACE GROUPS EPS = 1.0 AND MULT = 1
+      IF(NSYM.EQ.1) GOTO 60
+      K1=65536*I1(1)+256*(I1(2)+128)+I1(3)+128
+      IK1=65792-K1
+      DO 50 J=2,NSYM
+      DO 40 L=1,3
+      I2(L)=IS(L,1,J)*I1(1) + IS(L,2,J)*I1(2) + IS(L,3,J)*I1(3)
+   40 CONTINUE
+      K2=65536*I2(1)+256*(I2(2)+128)+I2(3)+128
+      IF(K2.EQ.K1) EPS=EPS+1.0
+      IF(ICENT.NE.0.AND.K2.EQ.IK1) EPS=EPS+1.0
+      IF(K2.EQ.K1.OR.K2.EQ.IK1) MULT=MULT+1
+   50 CONTINUE
+   60 CONTINUE
+      ID(K)=NSYM/MULT
+C     DETERMINE INDEX GROUP (FOR RESCALING)
+      MG=8
+      IF(KSYS.GT.3) MG=6
+      IF(KSYS.GE.7) GOTO 90
+      LG=MOD(IABS(LL(K)),2)
+      IF(KSYS.GE.5) GOTO 80
+      KG=MOD(IABS(LK(K)),2)
+      JG=MOD(IABS(LH(K)),2)
+C     TRICLINIC, MONOCLINIC AND ORTHORHOMBIC
+      IF(KSYS.LE.3) IG=JG+2*KG+4*LG
+C     TETRAGONAL
+      IF(KSYS.EQ.4) IG=JG+KG+3*LG
+      GOTO 100
+C     TRIGONAL, HEXAGONAL AND RHOMBOHEDRAL INDEXED ON HEXAGONAL AXES
+   80 IG=3*LG
+      IF(MOD(LH(K),3).EQ.0) IG=IG+1
+      IF(MOD(LK(K),3).EQ.0.OR.MOD(LH(K)+LK(K),3).EQ.0) IG=IG+1
+      GOTO 100
+C     CUBIC AND PRIMITIVE RHOMBOHEDRAL
+   90 IG=3*MOD(IABS(LH(K)+LK(K)+LL(K)),2)
+      IF(MOD(LH(K)-LL(K),3).EQ.0) IG=IG+1
+      IF(MOD(LK(K)-LL(K),3).EQ.0.OR.MOD(LH(K)-LK(K),3).EQ.0) IG=IG+1
+C     PACK SYMMETRY FUNCTIONS FOR LATER USE
+  100 IG=IG+1
+      ID(K)=10000*ID(K)+100*INT(EPS+0.5)+IG
+C     LOOK UP SCATTERING FACTOR TABLES GENERATED BY ATMCOEF
+      SINTH=100.0*SQRT(RHO(K))
+      IND=MAX0(2,INT(SINTH+1.5))
+      FRAC=SINTH-FLOAT(IND-1)
+      BF=0.5*(GIW(IND+1)-GIW(IND-1))
+      AF=BF+GIW(IND-1)-GIW(IND)
+      WFORM=AF*FRAC*FRAC+BF*FRAC+GIW(IND)
+      SFJ2(K)=WFORM
+      FF=FP(K)*FP(K)/PTS
+      SIGFF=2.0*FP(K)*SIGFP(K)/PTS
+C     'WILSON' STRUCTURE FACTOR
+      ED(K)=FF/(WFORM*EPS)
+      SIGED(K)=SIGFF/(WFORM*EPS)
+      GOTO 10
+  400 NUMB=K
+      WRITE(6,500) NUMB
+  500 FORMAT(//,I16,' REFLECTIONS WERE USED IN THIS JOB')
+  600 RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE STANDARD(KH,KK,KL,PHA,KH2,KK2,KL2,PHA2,IDT)
+C     GENERATE  SYMMETRY  RELATED  REFLECTIONS AND FIND STANDARD ONE.
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+      DIMENSION KL3(24),I1(3),I2(3)
+      DIMENSION JSIGN(24),T(24)
+      PI=4.0*ATAN(1.0)
+      DTOR=PI/180.0
+      MAXI=1
+      I1(1)=KH
+      I1(2)=KK
+      I1(3)=KL
+      DO 250 J=1,NSYM
+      JSIGN(J)=1
+      T(J)=1000.0
+      DO 220 I0=1,3
+      T(J)=T(J)+I1(I0)*TS(I0,J)
+      I2(I0)=IS(I0,1,J)*I1(1) + IS(I0,2,J)*I1(2) + IS(I0,3,J)*I1(3)
+  220 CONTINUE
+      IND=65536*I2(1)+256*I2(2)+I2(3)
+      IF(IND.LT.0) JSIGN(J)=-1
+      KL3(J)=32896+IABS(IND)
+      IF(J.EQ.1) GOTO 250
+      JM1=J-1
+      DO 240 I0=1,JM1
+      IF(KL3(I0).EQ.KL3(J)) KL3(J)=0
+  240 CONTINUE
+      IF(KL3(J).GT.KL3(MAXI)) MAXI=J
+  250 CONTINUE
+C     UNPACKING STANDARD REFLECTIONS
+      IND=KL3(MAXI)
+      KH2=IND/65536
+      IF(IND.LT.0) KH2=KH2-1
+      IND=IND-65536*KH2
+      KK2=IND/256
+      KL2=IND-256*KK2-128
+      KK2=KK2-128
+      IDT=JSIGN(MAXI)
+      FID=FLOAT(IDT)
+      DPHA=-2.0*PI*(T(MAXI)-1000.0)/DTOR
+      DPHA=AMOD(DPHA+1440.0,360.0)
+      PHA2=FID*AMOD(PHA+DPHA+1440.0,360.0)
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE OSIGNDT
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+C     UNITS FOR INPUT/OUTPUT, TITLE, FLAGS, MAD/MIR
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      COMMON/FHEAVY/ FHTMP(NREFL) 
+      REAL NCONST
+      CHARACTER NGS(26),KX(10),ITERM(4),NTLE(80),ITLE,KSP,KP,KM,KEQ,KSC
+      CALL CCPDPN(1,'SIGNDT','SCRATCH','F',130,0)
+C     OUTPUT FOR SIGN OR PHASE
+      WRITE(1,160) ITLE,(CX(I),I=1,6),NW,NO,ICENT,LATT,NSYM,ICOMP,NASU
+  160 FORMAT(80A1/' DIRECT CELL:'/'     A         B         C        ',
+     1 'ALPHA     BETA      GAMMA'/6F10.5/
+     2 ' ATOMS IN THE WHOLE UNIT CELL:'/
+     3 '       N1       N2       N3       N4       N5       N6',
+     4 '       N7       N8'/8I9/'       Z1       Z2       Z3',
+     5 '       Z4       Z5       Z6       Z7       Z8'/8I9/
+     6 ' ICENT LATT NSYM COMP  NASU  '/4I5,I8)
+      WRITE(1,170) ((TS(I,J),(IS(K,I,J),K=1,3),I=1,3),J=1,NSYM)
+  170 FORMAT(' EQUIVALENT POSITIONS IN REAL SPACE:'/3(F11.8,3I3))
+      IF(RHOCUT.GT.RHOMAX) RHOCUT=RHOMAX
+      RSLIM=SQRT(1/(4*RHOCUT))
+      WRITE(1,330) ISGM2,KMIN,NCYC,RSLIM,IDTYPE,IFIT,NSREQ,LIST,
+     1             JSKIP,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      IF(ICOMP.GT.0) WRITE(1,340)
+      IF(ICOMP.EQ.0) WRITE(1,350)
+  330 FORMAT(' ISGM2 KMIN NCYC RSLIM IDTYP FIT TRIAL LIST SKIP FOM',
+     1 ' JSUB JFIX  NFIX IDPB  RSL0'/
+     2 3I5,F6.2,8I5,I7,I5,F6.2)
+C     df,sigdf,fc which will be used in culculating hl should be saved
+  340 FORMAT('   H   K   L    FPH  SIG(FPH)     DF  SIGDF    E    ',
+     1 'SIG(E)   COSDPH     FH       FC     PHP    ESGMA    XKP    ',
+     2 'R-DELT   RSL  TPHI'/
+     3 ' (3I4,F8.1,F10.4,F8.1,F8.4,2F7.3,F9.4,2F9.1,I5,2X,F9.5,2F8.3,
+     4   F7.2,I5)')
+  350 FORMAT('   H   K   L    FPH  SIG(FPH)     DF  SIGDF    E    ',
+     1 'SIG(E)   COSDPH     FH       FC     PHP    ESGMA    XKP    ',
+     2 'R-DELT   RSL'/
+     3 ' (3I4,F8.1,F10.4,F8.1,F8.4,2F7.3,F9.4,2F9.1,I5,2X,F9.5,2F8.3,
+     4   F7.2)')
+      DO 400 I=1,NUMB
+      RSL=SQRT(1/(4*RHO(I)))
+      IF(ABS(XKP(I)).GT.1000)
+     1      XKP(I)=SIGN(1.0,XKP(I))*MIN(1000.0,ABS(XKP(I)))
+      IF(IDLT.NE.0) COSDP(I)=COS(DELT(I))
+      IF(ICOMP.GT.0 .and. fp(i).gt.0.0) 
+     +  WRITE(1,580) LH(I),LK(I),LL(I),FP(I),SIGFP(I),DF(I),
+     1  SIGDF(I),EP(I),SIGEP(I),COSDP(I),FH(I),FHTMP(I),PHIP(I),ESGM(I),
+     2  XKP(I),DELT(I),RSL,ITPH(I)
+      IF(ICOMP.EQ.0 .and. fp(i).gt.0.0) 
+     +  WRITE(1,590) LH(I),LK(I),LL(I),FP(I),SIGFP(I),DF(I),
+     1  SIGDF(I),EP(I),SIGEP(I),COSDP(I),FH(I),FHTMP(I),PHIP(I),ESGM(I),
+     2  XKP(I),DELT(I),RSL
+  400 CONTINUE
+  580 FORMAT(3I4,F8.1,F10.4,F8.1,F8.4,2F7.3,F9.4,2F9.1,F7.1,F9.5,
+     1 2F8.3,F7.2,I5)
+  590 FORMAT(3I4,F8.1,F10.4,F8.1,F8.4,2F7.3,F9.4,2F9.1,F7.1,F9.5,
+     1 2F8.3,F7.2)
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE SHARPEN
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+C     UNITS FOR INPUT/OUTPUT, TITLE, FLAGS, MAD/MIR
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      CHARACTER NGS(26),KX(10),ITERM(4),NTLE(80),ITLE,KSP,KP,KM,KEQ,KSC
+      NREF=NUMB
+      IF(NPWP.EQ.0) NPWP=8.0*ALOG10(0.05*FLOAT(NREF)+0.5)
+C     MAXIMUM OF 30 POINTS ON WILSON PLOT
+      IF(NPWP.GT.30) NPWP=30
+      RHOCUT=AMIN1(RHOCUT,RHOMAX)
+      RHOLOW=AMAX1(RHOLOW,RHOMIN)
+      ANGMAX=0.5*SQRT(1.0/RHOMAX)
+      ANGLHI=0.5*SQRT(1.0/RHOCUT)
+      ANGLOW=0.5*SQRT(1.0/RHOLOW)
+      WRITE (6,640) NREF,ANGLOW,ANGLHI,RHOLOW,RHOCUT,NPWP
+  640 FORMAT(/1X,'TOTAL NUMBER OF REFLECTIONS IN THIS-JOB =',I7/
+     1        1X,'LIMIT OF RESOLUTION FOR PHASING :'/
+     2        1X,F6.2,2X,'-',2X,F5.2,'  ANGSTROM',
+     3        ' (',F8.5,2X,'-',2X,F8.5,' )'/
+     4        1X,'NUMBER OF POINTS ON WILSON PLOT =',I3)
+      SC(1)=1.0
+C     OBTAIN SUMS FOR WILSON PLOT AND FIT LEAST SQUARES STRAIGHT LINE
+      CALL WILSONN(PTS,KSYS)
+  645 DO 655 I=1,8
+      BT(I)=2.0*BT(I)
+      IF(BT(I).LT.-19.9) BT(I)=BT(1)
+      IF(SCAL(I).LT.0.00001) SCAL(I)=SCAL(1)
+  655 CONTINUE
+C     CALCULATE SCALE FACTORS FOR APPROPRIATE REFLECTION GROUPS
+      CALL RESCA(KSYS)
+  657 CONTINUE
+C     CALCULATE FINAL E'S AND OUTPUT REFLECTION STATISTICS'
+      CALL ECAL(KSYS,PTS)
+
+      END
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C         W     W   IIIII   L        SSSSS    OOOOO   N     N          C
+C         W     W     I     L       S     S  O     O  NN    N          C
+C         W     W     I     L       S        O     O  N N   N          C
+C         W     W     I     L        SSSSS   O     O  N  N  N          C
+C         W  W  W     I     L             S  O     O  N   N N          C
+C         W W W W     I     L       S     S  O     O  N    NN          C
+C          W   W    IIIII   LLLLLL   SSSSS    OOOOO   N     N          C
+C                                                                      C
+C                          WILSON STATISTICS                           C
+C         A MODIFICATION OF THE SUBROUTINE 'SUM' OF MULTAN-80          C
+C                            VERSON   2003                             C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      SUBROUTINE WILSONN(PTS,KSYS)
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      CHARACTER ITLE
+      DIMENSION SW(30),SD(30),SR(30),SI(30),NSUM(30)
+      WRITE(6,40)
+   40 FORMAT(/44X,'EXP(-2*B*RHO)*E**2'/
+     1 ' RANGE',1X,'(SIN/LAM)**2',2X,'NUMBER',2X,'MEAN RHO',
+     2 3X,'MEAN I',5X,'MEAN',5X,'DEBYE',4X,'WILSON')
+C     SET INITIAL VALUES
+      PP=0.0
+      Q=0.0
+      R=0.0
+      S=0.0
+      T=0.0
+      NUMBER=0
+      ADD=RHOMAX/FLOAT(NPWP)
+      START=-ADD
+      END=ADD
+      RR=FLOAT(NPWP)/RHOMAX
+      DO 50 I=1,30
+      SW(I)=0.0
+      SD(I)=0.0
+      SR(I)=0.0
+      SI(I)=0.0
+      NSUM(I)=0
+   50 CONTINUE
+C     READ SCRATCH TAPE
+      DO 200 I=1,NUMB
+      IF(IREFQB.EQ.1.AND.SIGDF(I).LE.0.0) GOTO 200
+C     N STORES RANGE OF RHO
+      N=MIN0(INT(1.0+RR*RHO(I)),NPWP)
+      IG=1
+      MULT=ID(I)/10000
+      IE=(ID(I)-10000*MULT)/100
+      EPS=FLOAT(IE)
+      TMUL=FLOAT(MULT)
+C     WEIGHTED SUMS
+C     NUMBER OF REFLECTIONS
+      NSUM(N)=NSUM(N)+MULT
+C     WILSON
+      IF(IREFQB.EQ.1) SW(N)=SW(N)+EDP(I)*TMUL
+      IF(IREFQB.EQ.0) SW(N)=SW(N)+ED(I)*TMUL
+C     DEBYE
+      IF(IREFQB.EQ.1) SD(N)=SD(N)+EDP(I)*TMUL
+      IF(IREFQB.EQ.0) SD(N)=SD(N)+ED(I)*TMUL
+C     RHO
+      SR(N)=SR(N)+RHO(I)*TMUL
+C     INTENSITY
+      IF(IREFQB.EQ.1) SI(N)=SI(N)+TMUL*DF(I)*DF(I)/(EPS*PTS)
+      IF(IREFQB.EQ.0) SI(N)=SI(N)+TMUL*FP(I)*FP(I)/(EPS*PTS)
+  200 CONTINUE
+      DO 300 I=1,NPWP
+C     SMOOTH CURVE BY ADDING ADJACENT RANGES
+      NUMBER=NUMBER+NSUM(I)
+      IF (I.EQ.30) GOTO 250
+      NSUM(I)=NSUM(I)+NSUM(I+1)
+      SW(I)=SW(I)+SW(I+1)
+      SD(I)=SD(I)+SD(I+1)
+      SR(I)=SR(I)+SR(I+1)
+      SI(I)=SI(I)+SI(I+1)
+C     CALCULATE WEIGHTED AVERAGES AND LOGS
+  250 WT=FLOAT(NSUM(I))
+      DIV=1.0/AMAX1(1.0,WT)
+      ESQAV=SD(I)*DIV
+      AVI=SI(I)*DIV
+      START=START+ADD
+      END=AMIN1(END+ADD,RHOMAX)
+      IF(NSUM(I).EQ.0) GOTO 260
+      FLGD(I)=ALOG(ESQAV)
+      FLGW(I)=ALOG(SW(I)*DIV)
+      AVR(I)=SR(I)*DIV
+      GOTO 270
+  260 FLGD(I)=-20.0
+      FLGW(I)=-20.0
+      AVR(I)=(START+END)/2.0
+  270 WRITE(6,280) I,START,END,NSUM(I),AVR(I),AVI,ESQAV,FLGD(I),FLGW(I)
+  280 FORMAT(' ',I3,F8.4,'-',F6.4,I8,F9.4,F11.1,F9.4,2F10.4)
+C     COEFFICIENTS OF NORMAL EQUATIONS
+      PP=PP+WT*AVR(I)*AVR(I)
+      Q=Q+WT*AVR(I)
+      R=R+WT*AVR(I)*FLGD(I)
+      S=S+WT*FLGD(I)
+      T=T+WT
+  300 CONTINUE
+      IF(NUMBER.NE.0) GOTO 310
+      SC(IG)=0.0
+      GOTO 350
+  310 WRITE(6,320) PP,Q,R,Q,T,S
+  320 FORMAT(1X,'NORMAL EQUATIONS'/(' ',E11.3,' * SLOPE +',E11.3,
+     1       ' * INTERCEPT =',E11.3))
+C     LEAST SQUARES
+      DIV=PP*T-Q*Q
+      SLOPE=(R*T-Q*S)/DIV
+      FLGK=(PP*S-Q*R)/DIV
+      SC(IG)=EXP(-FLGK)
+      BT(IG)=-0.5*SLOPE
+      WRITE(6,340) SLOPE,FLGK,BT(IG),SC(IG)
+  340 FORMAT(/1X,'SLOPE=',F9.1,1X,'INTERCEPT=',F6.1,1X,
+     1 'TEMPERATURE FACTOR(B)=',F7.2,1X,'SCALE=',F7.2/
+     2 20X,'SQRT(SCALE)*F(OBS) = EXP(-B*RHO)*F(CAL)')
+  350 M=MG+1
+      DO 360 I=2,M
+      BT(I)=BT(1)
+  360 CONTINUE
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE              RESCA(KSYS)
+C                           INDEX GROUP RESCALING
+      PARAMETER ( NREFL = 800000 )
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      CHARACTER ITLE
+      DIMENSION NG(8),SCS(8)
+      TOT=0.0
+      IIG=1
+      NW=0
+      DO 10 I=1,8
+      SCS(I)=0.0
+      NG(I)=0
+   10 CONTINUE
+      WRITE(6,80)
+   80 FORMAT(/1X,12X,'***** NORMALIZATION BY LEAST SQUARES STRAIGHT'
+     1          ,'LINE *****'/)
+      DO 250 I=1,NUMB
+      IF(EDP(I).GT.100.0) GOTO 250
+      IG=MOD(ID(I),100)
+      ESQ=ED(I)*EXP(BT(IG)*RHO(I))
+      MULT=ID(I)/10000
+      TMUL=FLOAT(MULT)
+      TOT=TOT+ESQ*TMUL
+      NW=NW+MULT
+      SCS(IG)=SCS(IG)+ESQ*TMUL
+      NG(IG)=NG(IG)+MULT
+  250 CONTINUE
+  300 TOT=TOT/FLOAT(NW)
+C     MG=8 (PARITY GROUPS) FOR TRICLINIC, MONOCLINIC AND ORTHORHOMBIC
+C     MG=6 (MODIFIED PARITY GROUPS) FOR TETRAGONAL
+C     MG=6 (INDEX GROUPS) IN OTHER SYSTEMS
+C     MG=ANY NUMBER FROM 1 TO 8 FOR SPECIAL RESCALING
+      DO 310 I=1,MG
+      IF(NG(I).GT.0) SCS(I)=SCS(I)/(FLOAT(NG(I))*TOT)
+  310 CONTINUE
+      WRITE(6,330)
+  330 FORMAT(/1X,6X,'AVERAGE E**2 ACCORDING TO APPROPRIATE INDEX ',
+     1       'GROUP BEFORE RESCALING')
+      IF(KSYS.LE.3) WRITE(6,335)
+  335 FORMAT(/1X,33X,'PARITY GROUPS'/1X,13X,'ALL',4X,'EEE',4X,'OEE',
+     1            4X,'EOE',4X,'OOE',4X,'EEO',4X,'OEO',4X,'EOO',4X,'OOO')
+      IF(KSYS.EQ.4) WRITE(6,340)
+  340 FORMAT(/1X,28X,'MODIFIED PARITY GROUPS'/1X,13X,'ALL',5X,'EEE',
+     1            5X,'EOE,OEE',5X,'OOE',5X,'EEO',5X,'EOO,OEO',5X,'OOO')
+      IF(KSYS.LE.4) GOTO 365
+      WRITE(6,345)
+  345 FORMAT(/1X,'INDEX GROUPS DIVIDED ON -')
+      IF(KSYS.LE.6) WRITE(6,350)
+  350 FORMAT(10X,'1) MOD(H,3)',4X,'2) MOD(K,3)',4X,
+     1               '3) MOD(H+K,3)',4X,'4) MOD(L,2)')
+      IF(KSYS.GE.7) WRITE(6,355)
+  355 FORMAT(10X,'1) MOD(H-L,3)',4X,'2) MOD(K-L,3)',4X,
+     1               '3) MOD(H-K,3)',4X,'4) MOD(H+K+L,2)')
+      WRITE(6,360)
+  360 FORMAT(/1X,15X,'E - ZERO REMAINDER',4X,'O - NON-ZERO REMAINDER'/
+     1       /1X,14X,'ALL',3X,'OOOE',1X,'OOEE,OEOE',1X,'EEEE',1X,'OOOO',
+     2        1X,'OOEO,OEOO',1X,'EEEO'/' ',27X,'EOOE',17X,'EOOO')
+  365 TT=1.0000
+      IF(KSYS.EQ.4) THEN
+                WRITE(6,366) TT,(SCS(I),I=1,MG)
+                WRITE(6,368) NW,(NG(I),I=1,MG)
+                    ELSE
+                WRITE(6,370) TT,(SCS(I),I=1,MG)
+                WRITE(6,380) NW,(NG(I),I=1,MG)
+      ENDIF
+  366 FORMAT(' ',4X,'E**2',2X,F7.3,F8.3,2F10.3,F8.3,2F10.3)
+  368 FORMAT(' ',3X,'NUMBER',1X,I7,I8,2I10,I8,2I10)
+  370 FORMAT(' ',4X,'E**2',2X,9F7.3)
+  380 FORMAT(' ',3X,'NUMBER',1X,9I7)
+      TOT=1.0/TOT
+      DO 400 I=1,MG
+      SCAL(I)=TOT
+  400 CONTINUE
+      WRITE(6,542)
+  542 FORMAT(/1X,11X,'TEMPERATURE AND SCALING FACTORS DERIVED BY THE',
+     1       ' PROGRAM')
+      WRITE(6,545)
+  545 FORMAT(' ',16X,'--- EXP{(-2*BT)*RHO}*FCAL**2=SCALE*FOBS**2 ---'/ 
+     1        ' ',24X,'GROUP',5X,'2*BT',6X,'SCALE')
+      WRITE(6,548) BT(1),SCAL(1)
+  548 FORMAT(' ',25X,'ALL',F10.4,F11.4)
+      RETURN
+      END
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C             EEEEEEE            CCCCC      A     L                    C
+C             E                 C     C    A A    L                    C
+C             E                 C         A   A   L                    C
+C             EEEEE             C        A     A  L                    C
+C             E                 C        AAAAAAA  L                    C
+C             E                 C     C  A     A  L                    C
+C             EEEEEEE            CCCCC   A     A  LLLLLLL              C
+C                                                                      C
+C              CALCULATE FINAL E-VALUES AND RESCALED F'S'              C
+C     OUTPUT REFLECTIONS FOR PHASE, PREPARE TABLES OF STATISTICS       C
+C                           VERSION  2003                              C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      SUBROUTINE ECAL(KSYS,PTS)
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      REAL NCONST
+      DIMENSION INP(NREFL),INPA(NREFL),EH(NREFL)
+      DIMENSION AVA(10),AVC(10),AVH(10),RHR(10),NHR(10),STL(10),
+     1          CPH(25),NU(25)
+      CHARACTER ITLE,NN(80),ICHR(80)
+C     TABLES OF THEORETICAL DISTRIBUTIONS
+      CHARACTER*5 MKTYPE(2)
+      DATA AVA/0.886,1.0,1.329,2.0,3.323,6.0,0.736,1.0,2.0,2.415/
+      DATA AVC/0.798,1.0,1.596,3.0,6.383,15.0,0.968,2.0,8.0,8.691/
+      DATA AVH/0.718,1.0,1.916,4.5,12.26,37.5,1.145,3.5,26.0,26.903/
+      DATA CPH/0.368,0.463,0.526,0.574,0.612,0.643,0.670,0.694,0.715,
+     1 0.733,0.765,0.791,0.813,0.832,0.848,0.863,0.875,0.886,0.896,
+     2 0.905,0.913,0.920,0.926,0.932,0.938/
+      DATA ICHR/19*' ','A','L','L',' ','D','A','T','A',4*' ','H','K',
+     1  'L',4*' ','0','K','L',17*' ','A','C','E','N','T',' ',' ','C',
+     2  'E','N','T',' ',' ','H','-','C','E','N','T',3*' '/
+      DATA MKTYPE(1)/'*OAS*'/MKTYPE(2)/'*SIR*'/
+C     SET INITIAL VALUES
+  100 DO 110 I=1,10
+      RHR(I)=0.0
+      NHR(I)=0
+      DO 110 J=1,5
+      VST(I,J)=0.0
+  110 CONTINUE
+      DO 120 I=1,5
+      NST(I)=0
+      DO 120 J=1,25
+      ZT(J,I)=0.0
+  120 CONTINUE
+      DO 130 I=1,25
+      NU(I)=0
+  130 CONTINUE
+      NRW=0
+      KG=1
+      SCF=SQRT(SC(1))
+      RR=10.0/SQRT(RHOMAX)
+      DO 520 I=1,NUMB
+      IG=MOD(ID(I),100)
+      KG=IG
+      INPA(I)=32896
+      MF=I
+      D=EXP(BT(IG)*RHO(I))
+      D=D*SCAL(IG)
+      MULT=ID(I)/10000
+      IE=(ID(I)-10000*MULT)/100
+      ESQ=D*ED(I)
+      SIGESQ=D*SIGED(I)
+C     CALCULATE E AND RESCALED F
+      EP(I)=SQRT(ESQ)
+      SIGEP(I)=SIGESQ/MAX((2.0*EP(I)),1.0E-8)
+      ED(I)=EP(I)
+      SIGED(I)=SIGEP(I)
+C      FP(I)=FP(I)*SCF
+      BTP(I)=EXP(-BT(IG)/2*RHO(I))
+C      FP(I)=FP(I)/BTP(I)
+C      DF(I)=DF(I)*SCF
+C     PACKING
+      INPA(I)=65536*LH(I)+256*(LK(I)+128)+LL(I)+128
+      INP(I)=INPA(I)*32+ISIGN(1,INPA(I))*IG
+      IF(RHO(I).GT.RHOCUT) GOTO 410
+      IF(EP(I).GT.EMIN.AND.EP(I).LT.EMAX) GOTO 410
+      EP(I)=EP(I)+0.2*RHO(I)
+  410 TMUL=FLOAT(MULT)
+C     DISTRIBUTION OF E WITH SIN(THETA)/LAMBDA
+      N=MIN0(10,INT(1.0+RR*SQRT(RHO(I))))
+      NHR(N)=NHR(N)+MULT
+      RHR(N)=RHR(N)+ESQ*TMUL
+      NZR=INT(10.0*ESQ)+1
+      IF(NZR.GT.10) NZR=10+(NZR-9)/2
+      EE(1)=ED(I)
+      DO 420 J=2,6
+      EE(J)=EE(J-1)*ED(I)
+  420 CONTINUE
+      EE(7)=ESQ-1.0
+      EE(8)=EE(7)*EE(7)
+      EE(9)=EE(8)*EE(7)
+      EE(10)=ABS(EE(9))
+      EE(7)=ABS(EE(7))
+      DO 430 J=1,10
+      EE(J)=TMUL*EE(J)
+  430 CONTINUE
+C     ADD FUNCTIONS OF E TO APPROPRIATE ZONES
+      IND=1
+      J=LH(I)
+      K=LK(I)
+      L=LL(I)
+      CALL ADD(1)
+      GOTO (440,440,440,450,460,460,470,480),KSYS
+C     TRICLINIC, MONOCLINIC AND ORTHORHOMBIC
+  440 IF(J.EQ.0) CALL ADD(3)
+      IF(K.EQ.0) CALL ADD(4)
+      IF(L.EQ.0) CALL ADD(5)
+      GOTO 500
+C     TETRAGONAL
+  450 IF(J.EQ.0.OR.K.EQ.0) CALL ADD(3)
+      IF(IABS(J).EQ.IABS(K)) CALL ADD(4)
+      IF(L.EQ.0) CALL ADD(5)
+      GOTO 500
+C     TRIGONAL, HEXAGONAL AND RHOMBOHEDRAL INDEXED ON HEXAGONAL AXES
+  460 IF(J.EQ.0.OR.K.EQ.0.OR.J+K.EQ.0) CALL ADD(3)
+      IF(J.EQ.K.OR.J+2*K.EQ.0.OR.2*J+K.EQ.0) CALL ADD(4)
+      IF(L.EQ.0) CALL ADD(5)
+      GOTO 500
+C     PRIMITIVE RHOMBOHEDRAL
+  470 IF(J.EQ.K.OR.J.EQ.L.OR.K.EQ.L) CALL ADD(3)
+      IF(L.EQ.2*K-J.OR.K.EQ.2*J-L.OR.J.EQ.2*L-K) CALL ADD(4)
+      IF(J+K+L.EQ.0) CALL ADD(5)
+      GOTO 500
+C     CUBIC
+  480 IF(J.EQ.0.OR.K.EQ.0.OR.L.EQ.0) CALL ADD(3)
+      IF(IABS(J).EQ.IABS(K).OR.IABS(J).EQ.IABS(L).OR.IABS(K).EQ.IABS(L))
+     1  CALL ADD(4)
+C     H,H,2H IS IN TWO PRINCIPAL ZONES BUT NOT ON A PRINCIPAL AXIS
+      IF(IND.EQ.4) IND=0
+      IF(IABS(L).EQ.IABS(J+K).OR.IABS(K).EQ.IABS(J+L).OR.IABS(J).
+     1 EQ.IABS(K+L)) CALL ADD(5)
+C     REFLECTIONS NOT BELONGING TO PRINCIPAL ZONES
+  500 IF(IND.EQ.1) CALL ADD(2)
+C     DISTRIBUTION OF E FOR COMPLETE DATA
+      NET=MIN0(25,INT(10.0*ED(I)))
+      IF(NET.EQ.0) GOTO 510
+      NU(NET)=NU(NET)+1
+  510 NRW=NRW+MULT
+  520 CONTINUE
+  540 CONTINUE
+C     FORMAT FOR REFLECTION LIST - A WIDER LINEPRINTER MAY ALLOW MORE
+C     REFLECTIONS TO BE OUTPUT ON ONE LINE - THUS SAVING PAPER
+      IF((LIST.EQ.1.OR.LIST.EQ.0).AND.MF.NE.0) WRITE(6,550)
+  550 FORMAT(3('    H  K  L    FO   E',3X))
+      IF((LIST.EQ.1.OR.LIST.EQ.0).AND.MF.NE.0) WRITE(6,570)
+     1  (LH(K),LK(K),LL(K),FP(K),ED(K),K=1,MF)
+  570 FORMAT(3('  ',3I3,F7.1,F5.2,1X))
+C     OUTPUT STATISTICS
+      RR=1.0/RR
+      DO 620 I=1,10
+      STL(I)=RR*FLOAT(I)
+      IF(NHR(I).GT.0) RHR(I)=RHR(I)/FLOAT(NHR(I))
+      DO 610 J=1,5
+      IF(NST(J).GT.0) VST(I,J)=VST(I,J)/FLOAT(NST(J))
+  610 CONTINUE
+  620 CONTINUE
+      WRITE(6,630) STL,RHR,NHR
+  630 FORMAT(///1X,32X,'FINAL STATISTICS'//' ',17X,
+     1 'DISTRIBUTION OF E**2 WITH SIN(THETA)/LAMBDA'/' SIN/LAM',
+     2 F6.4,9F7.4/' ',1X,'E**2',2X,F6.4,9F7.4/' ','NUMBER',10I7)
+      WRITE(6,640)
+  640 FORMAT(//1X,32X,'AVERAGE VALUES',
+     1       //1X,4X,'AVERAGE',19X,'EXPERIMENTAL',19X,'THEORETICAL')
+      IF (KSYS.LE.6) THEN
+                     ICHR(53)='H'
+                     ICHR(54)='K'
+                     ICHR(55)='0'
+                IF (KSYS.LE.3) THEN
+                     ICHR(46)='H'
+                     ICHR(47)='0'
+                     ICHR(48)='L'
+                ELSE
+                     ICHR(46)='H'
+                     ICHR(47)='H'
+                     ICHR(48)='L'                     
+                ENDIF
+      ELSE
+                     ICHR(50)='H'
+                     ICHR(51)=','
+                     ICHR(52)='K'
+                     ICHR(53)=','
+                     ICHR(54)='-'
+                     ICHR(55)='H'
+                     ICHR(56)='-'
+                     ICHR(57)='K'
+                IF (KSYS.EQ.7) THEN
+                     ICHR(35)='H'
+                     ICHR(36)=','
+                     ICHR(37)='K'
+                     ICHR(38)='2'
+                     ICHR(39)='K'
+                     ICHR(40)='-'
+                     ICHR(41)='H'
+               ENDIF                    
+      ENDIF
+      WRITE(6,642) ICHR
+  642 FORMAT(80A1/)
+      WRITE(6,643) ((VST(I,J),J=1,5),AVA(I),AVC(I),AVH(I),I=1,10)
+  643 FORMAT(' ',5X,'MOD(E)',8X,8F8.3/
+     1       ' ',6X,'E**2',9X,8F8.3/
+     2       ' ',6X,'E**3',9X,8F8.3/
+     3       ' ',6X,'E**4',9X,8F8.3/
+     4       ' ',6X,'E**5',9X,8F8.3/
+     5       ' ',6X,'E**6',9X,8F8.3/
+     6       ' ',2X,'MOD(E**2-1)',6X,8F8.3/
+     7       ' ',2X,'(E**2-1)**2',6X,8F8.3/
+     8       ' ',2X,'(E**2-1)**3',6X,8F8.3/
+     9       ' ','(MOD(E**2-1))**3',3X,8F8.3)  
+      WRITE(6,750) NST
+  750 FORMAT(1X,'WEIGHTED SAMPLE SIZE',I7,4I8)
+      WRITE(6,760)
+  760 FORMAT(//18X,'DISTRIBUTION OF E - NUMBER OF ','E''S .GT. LIMIT')
+C  '
+      DO 780 I=1,25
+      AVR(I)=0.1*FLOAT(I)
+      II=I+1
+      IF(II.GT.25) GOTO 780
+      DO 770 J=II,25
+      NU(I)=NU(I)+NU(J)
+  770 CONTINUE
+  780 CONTINUE
+      WRITE(6,800) (AVR(I),I= 7,16),(NU(I),I= 7,16),
+     1             (AVR(I),I=17,25),(NU(I),I=17,25)
+  800 FORMAT(' ',7X,'E  ',10F7.1/' ',6X,'NO. ',10I7//
+     1       ' ',7X,'E  ',9F7.1,6X/' ',6X,'NO. ',9I7)
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE                   ADD(N)
+C     SUMS FOR REFLECTION IN ZONE N
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      IS=1
+      NT=N
+      IF(N.LE.2.OR.IND.LE.1) GOTO 20
+C     REFLECTION IS ON PRINCIPAL AXIS - THEREFORE IGNORE IT
+      NT=IND
+      IS=-1
+   20 S=FLOAT(IS)
+      DO 30 I=1,10
+      VST(I,NT)=VST(I,NT)+S*EE(I)
+   30 CONTINUE
+      NST(NT)=NST(NT)+IS*MULT
+      IF(NZR.LE.25) ZT(NZR,NT)=ZT(NZR,NT)+S*TMUL
+      IND=N
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE DF2DFI
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      COMMON/FHEAVY/FHTMP(NREFL)
+      REAL NCONST,NLOW,NHIGH
+      REAL NHIGH0
+      DIMENSION INP(NREFL),INPA(NREFL),EH(NREFL)
+      DIMENSION AVA(10),AVC(10),AVH(10),RHR(10),NHR(10),STL(10),
+     1          CPH(25),NU(25)
+      DIMENSION I1(3),I2(3)
+      CHARACTER ITLE,NN(80),ICHR(80)
+C     TABLES OF THEORETICAL DISTRIBUTIONS
+      CHARACTER*5 MKTYPE(2)
+      DATA AVA/0.886,1.0,1.329,2.0,3.323,6.0,0.736,1.0,2.0,2.415/
+      DATA AVC/0.798,1.0,1.596,3.0,6.383,15.0,0.968,2.0,8.0,8.691/
+      DATA AVH/0.718,1.0,1.916,4.5,12.26,37.5,1.145,3.5,26.0,26.903/
+      DATA CPH/0.368,0.463,0.526,0.574,0.612,0.643,0.670,0.694,0.715,
+     1 0.733,0.765,0.791,0.813,0.832,0.848,0.863,0.875,0.886,0.896,
+     2 0.905,0.913,0.920,0.926,0.932,0.938/
+      DATA ICHR/19*' ','A','L','L',' ','D','A','T','A',4*' ','H','K',
+     1  'L',4*' ','0','K','L',17*' ','A','C','E','N','T',' ',' ','C',
+     2  'E','N','T',' ',' ','H','-','C','E','N','T',3*' '/
+      DATA MKTYPE(1)/'*OAS*'/MKTYPE(2)/'*SIR*'/
+      PI=4.0*ATAN(1.0)
+      DTOR=PI/180.0
+C     SET UP SIN/COS TABLE
+      DO 30 I=1,450
+      SINT(I)=SIN(DTOR*FLOAT(I-1))
+   30 CONTINUE
+
+      DO 300 I=1,NUMB
+C     COMPUTE EPSILON AND MULTIPLICITY BY GENERATING EQUIVALENT
+C     REFLECTIONS
+C     EPSILON = NUMBER OF TIMES SAME REFLECTION APPEARS IN LIST
+C     MULTIPLICITY = NUMBER DIFFERENT REFLECTIONS IN LIST
+      EPS=1.0
+      MULT=1
+      I1(1)=LH(I)
+      I1(2)=LK(I)
+      I1(3)=LL(I)
+C     IN TRICLINIC SPACE GROUPS EPS = 1.0 AND MULT = 1
+      IF(NSYM.EQ.1) GOTO 60
+      K1=65536*I1(1)+256*(I1(2)+128)+I1(3)+128
+      IK1=65792-K1
+      DO 50 J=2,NSYM
+      DO 40 L=1,3
+      I2(L)=IS(L,1,J)*I1(1) + IS(L,2,J)*I1(2) + IS(L,3,J)*I1(3)
+   40 CONTINUE
+      K2=65536*I2(1)+256*(I2(2)+128)+I2(3)+128
+      IF(K2.EQ.K1) EPS=EPS+1.0
+      IF(ICENT.NE.0.AND.K2.EQ.IK1) EPS=EPS+1.0
+      IF(K2.EQ.K1.OR.K2.EQ.IK1) MULT=MULT+1
+   50 CONTINUE
+   60 CONTINUE
+C     LOOK UP SCATTERING FACTOR TABLES GENERATED BY ATMCOEF
+      SINTH=100.0*SQRT(RHO(I))
+      IND=MAX0(2,INT(SINTH+1.5))
+      FRAC=SINTH-FLOAT(IND-1)
+C     'WILSON' STRUCTURE FACTOR
+      BF=0.5*(GIS(IND+1)-GIS(IND-1))
+      AF=BF+GIS(IND-1)-GIS(IND)
+      WFORM=AF*FRAC*FRAC+BF*FRAC+GIS(IND)
+  105 NS1=1
+      NS2=1
+C     PHASES FOR WEIGHTED F-MAP
+      NF1=NS1+NAG(1)-1
+C      IF(IDTYPE.EQ.2) NS2=NF1+1
+      NF2=NF1
+      IF(NGP.GT.1) NF2=NF2+NAG(2)
+C      DO 110 IGP=1,NGP
+C      NF=NS+NAG(IGP)-1
+C      IF(NINF(IGP).EQ.4) GOTO 120
+C      NS=NF+1
+C  110 CONTINUE
+  120 RELGP1=0.0
+      REL2GP1=0.0
+      RIMGP1=0.0
+      RIM2GP1=0.0
+      IENTGP1=0
+      RELGP2=0.0
+      REL2GP2=0.0
+      RIMGP2=0.0
+      RIM2GP2=0.0
+      IENTGP2=0.0
+      DO 160 J=1,NSYM
+      T=1000.0
+      DO 150 L=1,3
+      T=T+FLOAT(I1(L))*TS(L,J)
+      I2(L)=IS(L,1,J)*I1(1) + IS(L,2,J)*I1(2) + IS(L,3,J)*I1(3)
+  150 CONTINUE
+      CALL SFAC(NS1,NF1,I2,T,RHO(I),AGP1,BGP1,A2GP1,B2GP1,IENTGP1)
+      IENTGP1=1
+      CALL SFAC(NS2,NF2,I2,T,RHO(I),AGP2,BGP2,A2GP2,B2GP2,IENTGP2)
+      IENTGP2=1
+      RELGP1=RELGP1+AGP1
+      RELGP2=RELGP2+AGP2
+      REL2GP1=REL2GP1+A2GP1
+      REL2GP2=REL2GP2+A2GP2
+      IF(ICENT.EQ.0) THEN
+         RIMGP1=RIMGP1+BGP1
+         RIMGP2=RIMGP2+BGP2
+      ENDIF
+      IF(ICENT.EQ.0.AND.MOD(IDTYPE,2).EQ.1) THEN
+          RIM2GP1=RIM2GP1+B2GP1
+          RIM2GP2=RIM2GP2+B2GP2
+      ENDIF
+      IF(ICENT.EQ.1) THEN
+          RELGP1=RELGP1+AGP1
+          RELGP2=RELGP2+AGP2
+      ENDIF
+      IF(ICENT.EQ.1.AND.MOD(IDTYPE,2).EQ.1) THEN
+          REL2GP1=REL2GP1+A2GP1
+          REL2GP2=REL2GP2+A2GP2
+      ENDIF
+  160 CONTINUE
+      IIG=1
+      FCL=PTS*SQRT(RELGP2*RELGP2+RIMGP2*RIMGP2)
+      SCF=SQRT(SCAL(1))
+      XKP(I) = 2.0*FP(I)*SCF*FCL*SCF/MAX((SFJ2(I)-WFORM),1.E-4)
+     $          /EPS/PTS/BTP(I)**2
+C     XKP(I) = 2.0*FP(I)*FCL/(SFJ2(I)-WFORM)/EPS/PTS
+C     FHTMP=F(hatom),FH=F''(hatom) for sad data
+C     FHTMP=FH=F(hatom) for sir data
+C     IN subroutine osign  this item will be named FC
+      FHTMP(I)=PTS*SQRT(RELGP1*RELGP1+RIMGP1*RIMGP1)
+      WEIGHT=0.5
+      IF(MOD(IDTYPE,2).EQ.1) THEN
+C     SIM WEIGHTING SCHEME FOR *OAS* DATA
+      FH(I)=PTS*SQRT(REL2GP1*REL2GP1+RIM2GP1*RIM2GP1)
+      PHIP(I)=ATAN2(REL2GP1,-RIM2GP1)
+      DELT(I)=ATAN2(RIMGP2,RELGP2)-PHIP(I)
+      IF(ABS(XKP(I)).GT.0.000001) WEIGHT=BS10(XKP(I))/XKP(I)
+                      ELSE
+C     SIM WEIGHTING SCHEME FOR *SIR* DATA
+      FH(I)=PTS*SQRT(RELGP1*RELGP1+RIMGP1*RIMGP1)
+      PHIP(I)=ATAN2(RIMGP1,RELGP1)
+      DELT(I)=ATAN2(RIMGP2,RELGP2)-PHIP(I)
+      IF(ABS(XKP(I)).GT.0.000001) WEIGHT=1-BS10(XKP(I))/XKP(I)
+              ENDIF
+C     CALCULATE PHASE DIFFERENCES FOR PROTEIN DATA
+      CTOP=0.0
+      IF(ABS(DF(I)).GT.0.0) CTOP=DF(I)
+      IF(MOD(IDTYPE,2).EQ.1) COSDP(I)=CTOP/(2.*MAX(FH(I),0.00001))
+      IF(MOD(IDTYPE,2).EQ.0) COSDP(I)=(FH(I)**2-CTOP**2+2*FP(I)*CTOP)
+     X                   /(2.*MAX(FH(I),0.00001)*MAX(FP(I),1.E-5))
+      IF(ABS(COSDP(I)).GT.500.0) COSDP(I)=SIGN(1.0,COSDP(I))*500.0
+      PHIP(I)=MOD(PHIP(I)*180.0/PI+360.0,360.0)
+C     CONSIDERATION FOR LACK OF CLOSURE ERROR
+      ESGM(I)=0.0
+C      IF(ABS(FH(I)).LT.0.00001) GOTO 400
+      FHDK=SIGDF(I)**2
+      IF(SIGDF(I).GT.0.0) THEN
+C     FOR SAD/OAS DATA
+C     IF(IDTYPE.EQ.1) ESGM(I)=EXP(-FHDK*NCONST**2/
+C    $                (4*MAX(FH(I),1.E-5)**2))
+      IF(MOD(IDTYPE,2).EQ.1) ESGM(I)=EXP(-FHDK*NCONST**2/
+     $                (4*MAX(FH(I),1.E-5)**2))
+C     FOR SIR DATA --- WITH FO CORRESPONDING TO THE NATIVE
+      IF( MOD(IDTYPE,2).EQ.0 .and. (FH(I)**2*FP(I)**2) .gt. 0.0 ) 
+     + ESGM(I)=EXP(-FHDK*NCONST**2*(FP(I)-CTOP)**2
+     1                /(MAX(FH(I),1.E-5)**2*MAX(FP(I),1.E-5)**2))
+      ELSE
+C     FOR SAD/OAS DATA
+      IF(MOD(IDTYPE,2).EQ.1) ESGM(I)=EXP(-SIGFP(I)**2*NCONST**2/
+     $                (2*MAX(FH(I),1.E-5)**2))
+C     FOR SIR DATA --- WITH FO CORRESPONDING TO THE NATIVE
+      IF(MOD(IDTYPE,2).EQ.0 .and. (FH(I)**2*FP(I)**2) .gt. 0.0 ) 
+     + ESGM(I)=EXP(-2*SIGFP(I)**2*NCONST**2*(FP(I)-CTOP)**2
+     1        /(MAX(FH(I),1.E-5)**2*MAX(FP(I),1.E-5)**2))
+      END IF
+    
+  300 CONTINUE
+      
+      IF( INCONST.EQ.0 ) THEN
+      WRITE(6,340) AOES
+  340 FORMAT(//,"TO SET <ESGMH> ~ ",F6.3," SEARCHING ",
+     1       "FOR APPROPRIATE N VALUE...",
+     1        /,5X,"CYCLE  ",7X,"N        <ESGMH>")
+      NLOW=0.0
+      NHIGH=1.0
+      NHIGH0=0.0
+      ICYCLE=0
+      JUDGE=0
+      NEXP=0
+  350 CONTINUE
+C     KEEP LAST CYCLE'S ESMAVE VALUE
+      IF(ICYCLE.GT.0) NHIGH0=NHIGH
+      ESMSUM=0.0
+      DO 400 I=1,NUMB
+C     a little modify for lack of closure error
+      CTOP=DF(I)
+C     CONSIDERATION FOR LACK OF CLOSURE ERROR
+      ESGM(I)=0.0
+C      IF(ABS(FH(I)).LT.0.00001) GOTO 400
+      FHDK=SIGDF(I)**2
+      IF(SIGDF(I).GT.0.0) THEN
+C     FOR OAS DATA
+      IF(MOD(IDTYPE,2).EQ.1) ESGM(I)=EXP(-FHDK*NHIGH**2/
+     $                (4*MAX(FH(I),1.E-5)**2))
+C     FOR SIR DATA --- WITH FO CORRESPONDING TO THE NATIVE
+      IF(MOD(IDTYPE,2).EQ.0 .and. (FH(I)**2*FP(I)**2) .gt. 0.0 ) 
+     + ESGM(I)=EXP(-FHDK*NHIGH**2*(FP(I)-CTOP)**2
+     1            /(MAX(FH(I),1.E-5)**2*MAX(FP(I),1.E-5)**2))
+      ELSE
+C     FOR OAS DATA
+      IF(MOD(IDTYPE,2).EQ.1) ESGM(I)=EXP(-SIGFP(I)**2*NHIGH**2/
+     $                (2*MAX(FH(I),1.E-5)**2))
+C     FOR SIR DATA --- WITH FO CORRESPONDING TO THE NATIVE
+      IF(MOD(IDTYPE,2).EQ.0 .and. (FH(I)**2*FP(I)**2) .gt. 0.0 ) 
+     + ESGM(I)=EXP(-2*SIGFP(I)**2*NHIGH**2*(FP(I)-CTOP)**2
+     1          /(MAX(FH(I),1.E-5)**2*MAX(FP(I),1.E-5)**2))
+      END IF
+      ESMSUM=ESMSUM+ESGM(I)
+  400 CONTINUE
+      ESMAVE=ESMSUM/NUMB
+      ICYCLE=ICYCLE+1
+      WRITE(6,450) ICYCLE,NHIGH,ESMAVE
+  450 FORMAT(I8,5X,F8.2,5X,e12.4) 
+      IF( ABS(ESMAVE-AOES).LT.0.001 .OR. 
+     #    ABS( NLOW-NHIGH ) .LT. 0.01 .OR.
+     #    ICYCLE.GT.100 ) GOTO 500
+      SESM1=ESMAVE-AOES
+      ABSESM1=ABS(SESM1)
+      SIGN1=SIGN(1.0,SESM1)
+      IF(ICYCLE.EQ.1.AND.ABSESM1.LT.0.20) GOTO 480
+      IF(ABSESM1.LT.0.10) GOTO 480
+      IF(JUDGE.EQ.1) GOTO 490
+      IF(ICYCLE.EQ.1) GOTO 460
+      IF((SIGN1*SIGN0).LT.0.0) GOTO 480
+  460 SIGN0=SIGN1
+      NEXP=NEXP+1
+      IF(ESMAVE.GT.AOES) NHIGH=2.0**NEXP
+      IF(ESMAVE.LT.AOES) NHIGH=2.0**(-NEXP)
+      NLOW=NHIGH0
+      GOTO 350
+  480 JUDGE=1
+  490 IF( ESMAVE .LT. AOES ) THEN
+      NHIGH=(NLOW+NHIGH)/2.0
+      GOTO 350
+      ELSE IF( ESMAVE .GT. AOES ) THEN
+      TEMP=NHIGH
+      NHIGH=NHIGH+(NHIGH-NLOW)
+      NLOW=TEMP
+      GOTO 350 
+      END IF
+  500 CONTINUE
+      END IF
+ 
+      END
+C                           ------------------
+C     BESSEL FUNCTION   I1(X)/I0(X)
+      FUNCTION BS10(X)
+      REAL*8    Y,P1,P2,P3,P4,P5,P6,P7,Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9,
+     1            R1,R2,R3,R4,R5,R6,R7,S1,S2,S3,S4,S5,S6,S7,S8,S9
+      DATA   P1,P2,P3,P4,P5,P6,P7/1.0D0,3.5156229D0,3.0899424D0,
+     1                1.2067492D0,0.2659732D0,0.360768D-1,0.45813D-2/,
+     2       Q1,Q2,Q3,Q4,Q5,Q6,Q7,Q8,Q9/0.39894228D0,0.1328592D-1,
+     3             0.225319D-2,-0.157565D-2,0.916281D-2,-0.2057706D-1,
+     4                         0.2635537D-1,-0.1647633D-1,0.392377D-2/,
+     5       R1,R2,R3,R4,R5,R6,R7/0.5D0,0.87890594D0,0.51498869D0,
+     6                0.15084934D0,0.2658733D-1,0.301532D-2,0.32411D-3/,
+     7       S1,S2,S3,S4,S5,S6,S7,S8,S9/0.39894228D0,-0.3988024D-1,
+     8             -0.362018D-2,0.163801D-2,-0.1031555D-1,0.2282967D-1,
+     9                         -0.2895312D-1,0.1787654D-1,-0.420059D-2/
+      IF (ABS(X).LT.3.75) THEN
+         Y=(X/3.75)**2
+         BS10=X*(R1+Y*(R2+Y*(R3+Y*(R4+Y*(R5+Y*(R6+Y*R7))))))
+     1         /(P1+Y*(P2+Y*(P3+Y*(P4+Y*(P5+Y*(P6+Y*P7))))))
+      ELSE
+         Y=3.75/ABS(X)
+         BS10=(S1+Y*(S2+Y*(S3+Y*(S4+Y*(S5+Y*(S6+Y*(S7+Y*(S8+Y*S9))))))))
+     1       /(Q1+Y*(Q2+Y*(Q3+Y*(Q4+Y*(Q5+Y*(Q6+Y*(Q7+Y*(Q8+Y*Q9))))))))
+      ENDIF
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE       SFAC(NS,NF,L,T,RHO,A,B,A2,B2,IENT)
+C                         STRUCTURE FACTOR CALCULATION
+      PARAMETER ( NATM = 80000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)  
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/SINETABLE/SINT(450)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      DIMENSION L(3),COST(360)
+      EQUIVALENCE (SINT(91),COST(1))
+      A=0.0
+      B=0.0
+      A2=0.0
+      B2=0.0
+      IF(IENT.EQ.1) GOTO 30
+      DO 10 I=1,NK
+      F(I)=AL(I)*EXP(-AS(I)*RHO)+BL(I)*EXP(-BS(I)*RHO)+CL(I)*EXP(-CS(I)
+     1    *RHO)+DL(I)*EXP(-DS(I)*RHO)+EL(I)
+   10 CONTINUE
+   30 HJ=FLOAT(L(1))
+      HK=FLOAT(L(2))
+      HL=FLOAT(L(3))
+      DO 50 I=NS,NF
+      N=NZ(I)
+      ARG=AMOD(HJ*X(I)+HK*Y(I)+HL*Z(I)+T,1.0)
+      IARG=INT(360.0*ARG+0.5)+1
+      IF(IARG.EQ.361) IARG=1
+      FJ2=F2(N)*EXP(-BFAC(I)*RHO)
+      FJ=F(N)*EXP(-BFAC(I)*RHO)
+   45 A=A+FJ*OCC(I)*COST(IARG)
+      B=B+FJ*OCC(I)*SINT(IARG)
+      A2=A2+FJ2*OCC(I)*COST(IARG)
+      B2=B2+FJ2*OCC(I)*SINT(IARG)
+   50 CONTINUE
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE REFQB
+      PARAMETER ( NATM = 80000 )
+      PARAMETER ( NREFL = 800000 )
+      COMMON/ATMFACTOR/AL(8),AS(8),BL(8),BS(8),CL(8),CS(8),DL(8),DS(8),
+     1                 EL(8),NW(8),NO(8),NK,NAT,F(9),F2(9)
+      COMMON/ATMGROUP/NINF(10),NAG(10),X(NATM),Y(NATM),Z(NATM),NZ(NATM),
+     1 OCC(NATM),BFAC(NATM)
+      COMMON/REFLX/ NUMB,LH(NREFL),LK(NREFL),LL(NREFL),FP(NREFL),
+     1       SIGFP(NREFL),ID(NREFL),RHO(NREFL),DF(NREFL),SIGDF(NREFL),
+     2       EP(NREFL),SIGEP(NREFL),BTP(NREFL),ITPH(NREFL),ED(NREFL),
+     3       SIGED(NREFL),EDP(NREFL),SIGEDP(NREFL),FH(NREFL),XKP(NREFL),
+     4       PHIP(NREFL),DELT(NREFL),SFJ2(NREFL),COSDP(NREFL),
+     5       ESGM(NREFL)
+      COMMON/RESCALING/MG,BT(9),SC(9),SCAL(8)
+      COMMON/SCATFACTOR/GIS(142),GIS2(142),GIW(142),NGP
+      COMMON/SINETABLE/SINT(450)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+C     UNITS FOR INPUT/OUTPUT, TITLE, FLAGS, MAD/MIR
+      COMMON/STTTIC/VST(10,5),NST(5),ZT(25,5),EE(10),MULT,IND,NZR,TMUL
+      COMMON/UNIT_OAS/ITLE(80),LIST,PI,IDTYPE,NCONST,JSUB,JFIX,NFIX,
+     1      INCONST,AOES,IDLT,ISEED,INHA,IFRC,ICOMP
+      COMMON/WILSON/FLGW(30),FLGD(30),AVR(30),SLOPE,DEL(9),KS(9)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      CHARACTER ITLE
+      DIMENSION I1(3),I2(3)
+      RHOMAX_SAVE=RHOMAX
+      RHOMIN_SAVE=RHOMIN
+      NPWP_SAVE=NPWP
+      NDF=0
+      DO 100 K=1,NUMB
+      EPS=1.0
+      MULT=1
+      I1(1)=LH(K)
+      I1(2)=LK(K)
+      I1(3)=LL(K)
+C     IN TRICLINIC SPACE GROUPS EPS = 1.0 AND MULT = 1
+      IF(NSYM.EQ.1) GOTO 60
+      K1=65536*I1(1)+256*(I1(2)+128)+I1(3)+128
+      IK1=65792-K1
+      DO 50 J=2,NSYM
+      DO 40 L=1,3
+      I2(L)=IS(L,1,J)*I1(1) + IS(L,2,J)*I1(2) + IS(L,3,J)*I1(3)
+   40 CONTINUE
+      K2=65536*I2(1)+256*(I2(2)+128)+I2(3)+128
+      IF(K2.EQ.K1) EPS=EPS+1.0
+      IF(ICENT.NE.0.AND.K2.EQ.IK1) EPS=EPS+1.0
+      IF(K2.EQ.K1.OR.K2.EQ.IK1) MULT=MULT+1
+   50 CONTINUE
+   60 CONTINUE
+C     LOOK UP SCATTERING FACTOR TABLES GENERATED BY ATMCOEF
+      SINTH=100.0*SQRT(RHO(K))
+      IND=MAX0(2,INT(SINTH+1.5))
+      FRAC=SINTH-FLOAT(IND-1)
+      IF(MOD(IDTYPE,2).EQ.0) THEN
+      BF=0.5*(GIS(IND+1)-GIS(IND-1))
+      AF=BF+GIS(IND-1)-GIS(IND)
+      FORM=AF*FRAC*FRAC+BF*FRAC+GIS(IND)
+      ELSE IF(MOD(IDTYPE,2).EQ.1) THEN
+      BF=0.5*(GIS2(IND+1)-GIS2(IND-1))
+      AF=BF+GIS2(IND-1)-GIS2(IND)
+      FORM=AF*FRAC*FRAC+BF*FRAC+GIS2(IND)
+      END IF
+      FF=DF(K)*DF(K)/PTS
+      SIGFF=2.0*ABS(DF(K))*SIGDF(K)/PTS
+C     'WILSON' STRUCTURE FACTOR
+      EDP(K)=FF/(FORM*EPS)
+      SIGEDP(K)=SIGFF/(FORM*EPS)
+      IF(SIGDF(K).GT.0.0) THEN
+      NDF=NDF+1
+      RHOMAX=AMAX1(RHOMAX,RHO(K))
+      RHOMIN=AMIN1(RHOMIN,RHO(K))
+      ENDIF
+  100 CONTINUE
+      NPWP=8.0*ALOG10(0.05*FLOAT(NDF)+0.5)
+      IF(NPWP.GT.30) NPWP=30
+      CALL WILSONN(PTS,KSYS)
+      NS=1
+      DO 110 IGP=1,NGP
+      NF=NS+NAG(IGP)-1
+      IF(NINF(IGP).EQ.4) GOTO 120
+      NS=NF+1
+  110 CONTINUE
+  120 CONTINUE
+      DO 130 I=NS,NF
+      OCC(I)=OCC(I)/SQRT(SC(1))
+      BFAC(I)=BT(1)
+      WRITE(6,*) X(I),Y(I),Z(I),OCC(I),BFAC(I)
+  130 CONTINUE       
+      NPWP=NPWP_SAVE
+      RHOMAX=RHOMAX_SAVE
+      RHOMIN=RHOMIN_SAVE
+      END
+
+************************************************************************
+*                                                                      *
+*                _/_/_/    _/_/_/_/_/   _/_/_/    _/      _/           *
+*              _/     _/      _/      _/     _/  _/_/    _/            *
+*             _/             _/      _/         _/ _/   _/             *
+*              _/_/_/       _/      _/ _/_/_/  _/  _/  _/              *
+*                   _/     _/      _/     _/  _/   _/ _/               *
+*           _/     _/     _/      _/     _/  _/    _/_/                *
+*            _/_/_/  _/_/_/_/_/    _/_/_/   _/      _/                 *
+*                                                                      *
+*                                                                      *
+*          Program Determining the Signs of Phase Differences          *
+*                            Version   2011                            *
+*                                                                      *
+************************************************************************
+      SUBROUTINE SIGNPRO
+      PARAMETER ( MAXRE=800000 )
+      INTEGER TRIAL
+C     MAXIM=MAXRE*18+24174 
+      COMMON /AAAA/ MAXIM(14424174)
+      COMMON /CNST/ SGM32,ITLE(80)
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /TABL/ SINT(451),DTOR
+      DIMENSION JN(8),JZ(8),MAXH(3)
+      CHARACTER ITLE
+      CHARACTER*8 CDATE,CTIME
+      CHARACTER*3 STYPE
+      DATA STYPE/'SAD'/
+    1 FORMAT(/,'<FONT COLOR="#0000FF">',//,
+     &8X,"                                                          ",/,
+     &8X,"          _/_/_/    _/_/_/_/_/   _/_/_/    _/      _/     ",/,
+     &8X,"        _/     _/      _/      _/     _/  _/_/    _/      ",/,
+     &8X,"       _/             _/      _/         _/ _/   _/       ",/,
+     &8X,"        _/_/_/       _/      _/ _/_/_/  _/  _/  _/        ",/,
+     &8X,"             _/     _/      _/     _/  _/   _/ _/         ",/,
+     &8X,"     _/     _/     _/      _/     _/  _/    _/_/          ",/,
+     &8X,"      _/_/_/  _/_/_/_/_/    _/_/_/   _/      _/           ",/,
+     &8X,"                                                          ",/,
+     &8X,"                                                          ",/,
+     &8X,"    Program Determining the Signs of Phase Differences    ",/,
+     &8X,"                                                          ",/,
+     &8X,"==========================================================",/,
+     &8X,/,'</FONT>',/)
+C     ASSIGN CHANNELS
+C     1: FORMATTED DATA AND KEYWORD INPUT
+C     2: BINARY OUTPUT OF PHASES FOR EXFFT
+C     3: BINARY SCRATCH OF SIGMA2 RELATIONSHIPS
+C     6: FORMATTED LINE-PRINTER OUTPUT
+      REWIND(1)
+      CALL CCPDPN(3,'SIGMA2.DAT','UNKNOWN','U',80,0)
+      WRITE(6,1)
+C  KUSER2: MAX. NO OF REFLECTIONS IN HEMISPHERE: DIMENSION OF IR1,IR2,LOC
+      KUSER2=MAXRE*6
+      DTOR=ATAN(1.0)/45.0
+      DO 10 I=1,451
+      SINT(I)=SIN(DTOR*(I-1))
+   10 CONTINUE
+C     READ CELL, GROUP AND SYMMETRY INFORMATION FROM PREPAR
+      READ(1,20) ITLE,PARA,JN,JZ,ICENT,LATT,NSYM,ICOMP,NASU
+   20 FORMAT(80A1///6F10.5///8I9//8I9//4I5,I8)
+      PHCOMP=FLOAT(ICOMP)
+      READ(1,30) ((TS(I,J),(IS(K,I,J),K=1,3),I=1,3),J=1,NSYM)
+   30 FORMAT(/3(F11.8,3I3))
+      DO 60 I=1,3
+      DO 50 J=1,NSYM
+      ITS(I,J)=TS(I,J)*24
+   50 CONTINUE
+   60 CONTINUE
+C     READ KEYWORDS
+      READ(1,70) ISGM2,KMIN,NCYC,RSLIM,IDTYPE,IFIT,TRIAL,LIST,
+     1 JSKIP,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+   70 FORMAT(/3I5,F6.2,8I5,I7,I5,F6.2)
+      NN=2
+      IF(LATT.EQ.1) NN=1
+      IF(LATT.EQ.6) NN=4
+      IF(LATT.EQ.7) NN=3
+      SUM1 = 0.0
+      SUM2 = 0.0
+      DO 80 I=1,8
+      TEMP=(JN(I)*JZ(I)**2)/NN
+      SUM1 = SUM1 + TEMP
+      SUM2 = SUM2 + TEMP * FLOAT(JZ(I))
+   80 CONTINUE
+      SGM32=SUM2/(SUM1**1.5)
+      CALL READER
+      CALL SORT(E,10,13)
+      CALL CCPDAT(CDATE)
+      CALL UTIME(CTIME)
+      WRITE(6,100) ITLE,CDATE,CTIME,
+     1             SGM32,RSLIM,NUMB
+  100 FORMAT(/80A1//11X,'RESOLVING PHASE AMBIGUITIES FOR',
+     1 ' PROTEIN SIR OR SAD DATA'//30X,'VERSION   JUNE   2009'
+     2 //55X,A8,3X,A8/
+     2 /28X,'SET UP PHASE RELATIONSHIPS'
+     3 //26X,'SIGMA3/SIGMA2**1.5  =',F9.5
+     4 //10X,'NUMBER OF REFLECTIONS AT ',F5.2,2X,
+     5 'ANGSTROM RESOLUTION  =',I8)
+      IF(IFIT.EQ.1) WRITE(6,140)
+      IF(IFIT.EQ.0) WRITE(6,160)
+      IF(KFOM.EQ.1) WRITE(6,180)
+  140 FORMAT(/13X,42HFORCING COS(DELTAPHI)'S TO FOLLOW UNIFORM ,
+     1 12HDISTRIBUTION)
+  160 FORMAT(/11X,46HNOT FORCING COS(DELTAPHI)'S TO FOLLOW UNIFORM ,
+     1 12HDISTRIBUTION)
+  180 FORMAT(/15X,39HFORCING OUTPUT FOM'S TO FOLLOW UNIFORM ,
+     1 12HDISTRIBUTION)
+      ESGMSUM=0.0
+      DO 250 JJ=1,NUMB
+      ESGMSUM=ESGMSUM+ESGMH(JJ)
+  250 CONTINUE
+      ESGMAVE=ESGMSUM/NUMB
+C
+      IF(IDTYPE.EQ.2) STYPE='SIR'
+C
+Cck   WRITE(6,280) ESGMAVE,STYPE
+      IF(IDTYPE.LE.2) WRITE(6,280) ESGMAVE,STYPE
+  280 FORMAT(/12X,'THE AVERAGE VALUE OF ESGMH IS',F10.4,' FOR ',
+     &             A3,' PHASING.')
+      SGM32 = 200.0 * SGM32
+      IF(ISGM2.EQ.0) GOTO 400
+      WRITE(6,300)
+  300 FORMAT(/18X,' SIGMA2 RELATIONSHIPS READ FROM A PREVIOUS RUN')
+      GOTO 500
+  400 CALL SETUP(NIOR,KUSER2)
+C     SET UP SIGMA2 RELATIONSHIPS
+      CALL SIGMA2(NIOR)
+  500 DO 510 I=1,3
+      MAXH(I)=-999
+  510 CONTINUE
+      DO 550 I=1,NUMB
+      IORD(I)=NUMB+1-I
+      MAXH(1)=MAX0(MAXH(1),IABS(JH(I)))
+      MAXH(2)=MAX0(MAXH(2),IABS(JK(I)))
+      MAXH(3)=MAX0(MAXH(3),IABS(JL(I)))
+  550 CONTINUE
+      CALL BEST(MAXH)
+      CALL OSIGN
+C     END OF SIGN
+      WRITE(6,600)
+  600 FORMAT(//,"ALL DONE WITH SIGN...")
+      CALL CCPDAT(CDATE)
+      CALL UTIME(CTIME)
+      WRITE(6,900) CDATE,CTIME
+  900 FORMAT(53X,A8,3X,A8)
+      CLOSE (3,ERR=910)
+  910 CONTINUE 
+      END
+************************************************************************
+*                                                                      *
+*                _/_/_/_/    _/_/_/_/_/   _/_/_/    _/_/_/_/_/         *
+*               _/      _/  _/          _/     _/      _/              *
+*              _/      _/  _/          _/             _/               *
+*             _/_/_/_/    _/_/_/_/      _/_/_/       _/                *
+*            _/      _/  _/                  _/     _/                 *
+*           _/      _/  _/           _/     _/     _/                  *
+*          _/_/_/_/    _/_/_/_/_/     _/_/_/      _/                   *
+*                                                                      *
+*                                                                      *
+* PROGRAM CALCULATING THE BEST PHASES FOR  PROTEIN 'SIR' OR 'OAS' DATA *
+*                            VERSION   2011                            *
+*                                                                      *
+************************************************************************
+      SUBROUTINE BEST(MAXH)
+      PARAMETER ( MAXRE=800000 )
+      INTEGER PHP3,TRIAL,IXRAND,IYRAND
+      INTEGER ARGJ1,ARGJ2,ARGJ3
+      COMMON /AAAA/ IPHB(MAXRE),IPHM(MAXRE),IPHC(MAXRE),IPHAV(MAXRE),
+     1              IPH1(3000),IPH2(3000),NOUSE(11218174)
+C     NOUSE=(18-4)*MAXRE-2*3000+24174
+      COMMON /CNST/ SGM32,ITLE(80)
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /TABL/ SINT(451),DTOR
+      DIMENSION MAXH(3),SNUM(MAXRE),SDEN(MAXRE)
+      CHARACTER ITLE
+      DATA IXRAND/1/,IYRAND/1/
+      SINV(I)=SINT(MOD(I+1080,360)+1)
+      COSV(I)=SINT(MOD(I+1080,360)+91)
+C     MAXSET=TRIAL
+      IF(MAXSET.EQ.0) MAXSET=1
+      IF(NCYC.EQ.0) NCYC = 2
+CLIU_BEGIN
+C     IF((JSKIP.NE.0).AND.(TRIAL.GT.0)) THEN
+C       DO N=1,JSKIP
+C           DO NM=1,NUMB
+C               ATEMP=RRAND(IXRAND,IYRAND)
+C           ENDDO
+C       ENDDO
+C     ENDIF
+CLIU_END
+C     DO 3000 N=JSKIP+1,MAXSET
+C       IF(TRIAL.EQ.0) THEN
+          WRITE(6,2002)
+ 2002     FORMAT(/1X,'SINGLE-SOLUTION MODE STARTING WITH P+ = 1/2',/)
+C       ELSE
+C         WRITE(6,2005) N
+C2005     FORMAT(/1X,'RANDOM-TRIAL SET: ',I6)
+C       ENDIF
+        DO 2010 L=1,NUMB
+          FOM(L)=0.0
+ 2010   CONTINUE
+        DO 2500 J=1,NCYC
+          DO 2020 L=1,NUMB
+            SPOS(L)=0.0
+            SNUM(L)=0.0
+            SDEN(L)=0.0
+ 2020     CONTINUE
+C     READ AND DECODE SIGMA2 RELATIONSHIPS
+          REWIND 3
+ 2040     READ(3) IPH1,IPH2
+          DO 2080 I=1,3000
+            IF(IPH1(I).NE.0) GOTO 2060
+            II=IPH2(I)
+            IF(II-NUMB) 2080,2080,2090
+ 2060       IBUF3=IPH1(I)/65536
+            IE311=IPH2(I)/65536
+            IPH11=16384-(IPH1(I)-65536*IBUF3)
+            IPH22=16384-(IPH2(I)-65536*IE311)
+            ILA=IABS(IPH11)
+            IRA=IABS(IPH22)
+            M1=ISIGN(1,IPH11)
+            M2=ISIGN(1,IPH22)
+            FM1=FLOAT(M1)
+            FM2=FLOAT(M2)
+            J1=II
+            J2=ILA
+            J3=IRA
+            PHP3=M1*IPHP(J2)+M2*IPHP(J3)+IBUF3*15-IPHP(J1)
+            PHP3=MOD(PHP3+1440,360)
+            E3=FLOAT(IE311)/100.0
+            U1=E3*SINV(IDPH(J1))
+            V1=E3*SINV(IDPH(J2))
+            W1=E3*SINV(IDPH(J3))
+            ARGJ1=PHP3+M1*IDPB(J2)+M2*IDPB(J3)
+            SNUM(J1)=SNUM(J1)+(FOM(J2)*FOM(J3)*E3*SINV(ARGJ1))
+            SDEN(J1)=SDEN(J1)+(FOM(J2)*FOM(J3)*E3*COSV(ARGJ1))
+            SPOS(J1)=SPOS(J1)+(FOM(J2)*FOM(J3)*U1*SINV(ARGJ1))
+            ARGJ2=-PHP3+IDPB(J1)-M2*IDPB(J3)
+            SNUM(J2)=SNUM(J2)+FM1*(FOM(J1)*FOM(J3)*E3*SINV(ARGJ2))
+            SDEN(J2)=SDEN(J2)+FM1*(FOM(J1)*FOM(J3)*E3*COSV(ARGJ2))
+            SPOS(J2)=SPOS(J2)+FM1*(FOM(J1)*FOM(J3)*V1*SINV(ARGJ2))
+            ARGJ3=-PHP3+IDPB(J1)-M1*IDPB(J2)
+            SNUM(J3)=SNUM(J3)+FM2*(FOM(J1)*FOM(J2)*E3*SINV(ARGJ3))
+            SDEN(J3)=SDEN(J3)+FM2*(FOM(J1)*FOM(J2)*E3*COSV(ARGJ3))
+            SPOS(J3)=SPOS(J3)+FM2*(FOM(J1)*FOM(J2)*W1*SINV(ARGJ3))
+ 2080     CONTINUE
+          GOTO 2040
+ 2090     REWIND 3
+          DO 2100 L=1,NUMB
+            XCOS=XKP(L)*COS(ABS(DELT(L)))
+            XSIN=XKP(L)*SIGN(1.0,DELT(L))*SIN(ABS(DELT(L)))
+             IF(ABS(XSIN).GT.500)
+     &        XSIN=SIGN(1.0,XSIN)*MIN(500.0,ABS(XSIN))
+            IF(J.GT.1) THEN
+              SPOS(L)=SPOS(L)+XSIN*SINV(IDPH(L))
+C     CALCULATING DELTA_PHI VALUE
+              SNUM(L)=SNUM(L)+XSIN
+              SDEN(L)=SDEN(L)+XCOS
+              ADPHC=ATAN2(SNUM(L),SDEN(L))/DTOR
+              IDPC(L)=NINT(ADPHC)
+            ELSE
+            ENDIF
+C           IF(J.EQ.1.AND.TRIAL.GT.0) THEN
+C             PROB(L)=RRAND(IXRAND,IYRAND)
+C           ELSE
+              PROB(L)=0.5000+0.5*TANH(SPOS(L))
+C           ENDIF
+            IF(J.GT.1.AND.MARK(L).LT.0) GOTO 2000
+            GSEMH=ESGMH(L)
+C           IF(NCYC.GT.1.AND.J.EQ.NCYC) GSEMH=1.0
+            FOM(L)=GSEMH*
+     1        SQRT(1.-2.*PROB(L)*(1.-PROB(L))*(1.-COSV(2*IDPH(L))))
+            GOTO 2100
+ 2000       PROB(L)=1.0
+ 2100     CONTINUE
+C     FIT FOM TO UNIFORM DISTRIBUTION
+      IF(J.LT.NCYC) GOTO 2120
+C  AVERAGE VALUE OF FIGURE OF MERITS BEFORE FOMs FIT.
+      TOLFOM = 0.
+      DO NFOM = 1, NUMB
+         TOLFOM = TOLFOM + FOM(NFOM)
+      END DO
+      AVFOM = TOLFOM/FLOAT(NUMB)
+C
+      IF(KFOM.EQ.0) GOTO 2120
+      CALL SORT(FOM,11,16)
+      DO 2115 I=1,NUMB
+      FOM(I)=FLOAT(NUMB-I+1)/FLOAT(NUMB)
+      FOM(I)=AMAX1(0.01,FOM(I))
+ 2115 CONTINUE
+ 2120 CALL SORT(FO,11,16)
+      NTOT=0
+      FTOT=0.0
+      FWTOT=0.0
+      ERRM=0.0
+      ERRMF=0.0
+      ERRB=0.0
+      ERRBF=0.0
+      ERRBFW=0.0
+      ERRC=0.0
+C     OUTPUT
+      IF(PHCOMP.GT.0) WRITE(6,2175) J
+ 2175 FORMAT(/1X,'CYCLE',I5,'  SORTED BY FO')
+ 2200 IF(PHCOMP.GT.0) WRITE(6,2205)
+ 2205 FORMAT('    NO      ERM    ERMF   ERB    ERBF  ERBFW   ERC')
+      IF((LIST.EQ.2.OR.LIST.EQ.0).AND.PHCOMP.LT.0.5.AND.J.EQ.NCYC) 
+     1 WRITE(6,2225)
+ 2225 FORMAT('   H  K  L   E     FO     SIGF0',
+     1  ' PHP DPH PHM PHB  FOM PROB   RSL DPC    No',
+     1  /,'(1X,3I3,F5.2,2F8.2,4I4,2F5.2,F6.2,I4,I7)')
+ 2230       DO 2300 L=1,NUMB
+              NTOT=NTOT+1
+              FTOT=FTOT+FO(L)
+              FWTOT=FWTOT+FO(L)*FOM(L)
+              IQQ=1
+              IF(J.GT.1.AND.MARK(L).LT.0) GOTO 2250
+              IF(ABS(SPOS(L)).NE.0.00) IQQ=SIGN(1.0,SPOS(L))
+              IF(IDPHB.EQ.1.OR.IDPHB.EQ.2.AND.RSL(L).LT.RSL0) GOTO 2235
+              IF(IABS(MARK(L)).EQ.1) GOTO 2240
+C      FOR DELTA_PHI BEST
+              ADPH=ATAN2(2.*(PROB(L)-0.5)*SINV(IDPH(L)),
+     1                          COSV(IDPH(L)))/DTOR
+              IDPB(L)=NINT(ADPH)
+              GOTO 2250
+ 2235         IDPB(L)=IDPC(L)
+              GOTO 2250
+ 2240         ADPH=ATAN2(FLOAT(IQQ)*SINV(IDPH(L)),COSV(IDPH(L)))/DTOR
+              IDPB(L)=NINT(ADPH)
+ 2250         IPHC(L)=MOD(IPHP(L)+ISDP(L)*IDPH(L)+360,360)
+              IF(ISDP(L).EQ.0) IPHC(L)=MOD(IPHP(L)+IDPH(L)+360,360)
+              IPHB(L)=MOD(IPHP(L)+IDPB(L)+360,360)
+              IPHM(L)=MOD(IPHP(L)+IQQ*IDPH(L)+360,360)
+              IF(J.GT.1.AND.MARK(L).LT.0) IPHM(L)=IPHB(L)
+              IF(PHCOMP.LT.0.5) GOTO 2280
+C     COMPARE WITH STANDARD PHASES
+              IDIF=MOD(IPHM(L)-ITPH(L)+1080,360)
+              IF(IDIF.GT.180) IDIF=360-IDIF
+              IDIFB=MOD(IPHB(L)-ITPH(L)+1080,360)
+              IF(IDIFB.GT.180) IDIFB=360-IDIFB
+              IDIFC=MOD(IPHC(L)-ITPH(L)+1080,360)
+              IF(IDIFC.GT.180) IDIFC=360-IDIFC
+              FNTOT=FLOAT(NTOT)
+              ERRM=ERRM+IDIF
+              AVERM=ERRM/FNTOT                      
+              ERRMF=ERRMF+IDIF*FO(L)
+              AVERMF=ERRMF/FTOT                      
+              ERRB=ERRB+IDIFB
+              AVERB=ERRB/FNTOT
+              ERRBF=ERRBF+IDIFB*FO(L)
+              AVERBF=ERRBF/FTOT                      
+              ERRBFW=ERRBFW+FO(L)*FOM(L)*IDIFB
+              IF(FWTOT.LE.0.1) AVERBFW=180.0
+              IF(FWTOT.GT.0.1) AVERBFW=ERRBFW/FWTOT
+              ERRC=ERRC+IDIFC
+              AVERC=ERRC/FNTOT
+              IF(PHCOMP.GT.0.AND.(MOD(L,1000).EQ.0.OR.L.EQ.NUMB))
+     1                 WRITE(6,2275) L,
+     1                  AVERM,AVERMF,AVERB,AVERBF,AVERBFW,AVERC
+ 2275         FORMAT(I7,2X,6F7.2)
+              GOTO 2300
+ 2280         IF((LIST.EQ.2.OR.LIST.EQ.0).AND.J.EQ.NCYC) WRITE(6,2290)
+     1          JH(L),JK(L),JL(L),E(L),FO(L),SF0(L),IPHP(L),IDPH(L),
+     2          IPHM(L),IPHB(L),FOM(L),PROB(L),RSL(L),IDPC(L),NTOT
+ 2290         FORMAT(1X,3I3,F5.2,2F8.2,4I4,2F5.2,F6.2,I4,I7)
+ 2300       CONTINUE
+ 2400     CONTINUE
+          IF(J.NE.NCYC) CALL ISORT(IORD,11,16)
+C     COMBINE SIGN WITH KNOWN PHASES
+      IF(JFIX.EQ.0.OR.JFIX.EQ.1.AND.J.NE.1) GOTO 2500
+      CALL FIXPHS
+ 2500   CONTINUE
+C3000 CONTINUE
+C    
+      IF(PHCOMP.GT.0) THEN
+       IF(LIST.NE.2.AND.LIST.NE.0) GOTO 3030
+       WRITE(6,3015)
+ 3015      FORMAT(//,'   NO  H  K  L  FOBS  TPH PHP DPH',
+     1      ' PHM PHB  FOM PROB DPC  ERM  ERB ERBF EBFW  ERC')
+ 3030       NTOT=0
+            FTOT=0.0
+            FWTOT=0.0
+            ERRM=0.0
+            ERRMF=0.0
+            ERRB=0.0
+            ERRBF=0.0
+            ERRBFW=0.0
+            ERRC=0.0
+        DO 3500 L=1,NUMB
+              NTOT=NTOT+1
+              FTOT=FTOT+FO(L)
+              FWTOT=FWTOT+FO(L)*FOM(L)
+C     COMPARE WITH STANDARD PHASES
+              IDIF=MOD(IPHM(L)-ITPH(L)+1080,360)
+              IF(IDIF.GT.180) IDIF=360-IDIF
+              IDIFB=MOD(IPHB(L)-ITPH(L)+1080,360)
+              IF(IDIFB.GT.180) IDIFB=360-IDIFB
+              IDIFC=MOD(IPHC(L)-ITPH(L)+1080,360)
+              IF(IDIFC.GT.180) IDIFC=360-IDIFC
+              FNTOT=FLOAT(NTOT)
+              ERRM=ERRM+IDIF
+              AVERM=ERRM/FNTOT
+              ERRMF=ERRMF+IDIF*FO(L)
+              AVERMF=ERRMF/FTOT
+              ERRB=ERRB+IDIFB
+              AVERB=ERRB/FNTOT
+              ERRBF=ERRBF+IDIFB*FO(L)
+              AVERBF=ERRBF/FTOT
+              ERRBFW=ERRBFW+FO(L)*FOM(L)*IDIFB
+              IF(FWTOT.LE.0.1) AVERBFW=180.0
+              IF(FWTOT.GT.0.1) AVERBFW=ERRBFW/FWTOT
+              ERRC=ERRC+IDIFC
+              AVERC=ERRC/FNTOT
+              IF(LIST.EQ.2.OR.LIST.EQ.0)WRITE(6,3270) NTOT,JH(L),JK(L),
+     1         JL(L),FO(L),ITPH(L),IPHP(L),IDPH(L),IPHM(L),IPHB(L),
+     2         FOM(L),PROB(L),IDPC(L),AVERM,AVERB,AVERBF,AVERBFW,AVERC
+ 3270         FORMAT(I5,3I3,F7.1,5I4,2F5.2,I4,5F5.1)
+ 3500   CONTINUE
+      ENDIF
+C OUTPUT AVERAGE FIGURE OF MERITs
+      WRITE(6,*)
+      WRITE (6,2365) AVFOM
+ 2365 FORMAT (//,
+     &        '***********************************************',/,
+     &        '***  AVERAGE FIGURE OF MERIT (FOM) =',F6.3,'  ***',/,
+     &        '***********************************************',//)
+      WRITE (6,*)
+
+      RETURN                                                            
+      END                                                               
+C-----------------------------------------------------------------------
+C     A FUNCTION FOR RANDOM NUMBER
+      FUNCTION RRAND (IX,IY)
+      IX = MOD(251*IX,1048576)
+      IY = MOD(179*IY,1048576)
+      RRAND = FLOAT (MOD(IX+IY,1048576))/1048576.0
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE FIXPHS
+      PARAMETER ( MAXRE=800000 )
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      DIMENSION KH(MAXRE),KK(MAXRE),KL(MAXRE),PHM(MAXRE),FOMM(MAXRE)
+      CHARACTER FM*120,CFM*21
+      CFM='1234567890., ()/EFHIX'
+      OPEN(11,FILE='FIXPHS.TM',FORM='FORMATTED',STATUS='UNKNOWN')
+      NRP=0
+      NLP=0
+      TEST=0.0
+   20 READ(11,'(A120)') FM
+      DO 30 I=1,LEN(FM)
+      IF(INDEX(CFM,FM(I:I)).EQ.0) GOTO 20
+      IF(FM(I:I).NE.' ') TEST=1.0
+      IF(FM(I:I).EQ.'(') NRP=NRP+1
+      IF(FM(I:I).EQ.')') NLP=NLP+1
+   30 CONTINUE
+      IF(TEST.LT.0.5) GOTO 20
+      IF((NRP+NLP).EQ.0.OR.NRP.NE.NLP) GOTO 20
+      MD=0
+      J=1
+   40 READ(11,FM,END=50) KH(J),KK(J),KL(J),PHM(J),FOMM(J)
+      J=J+1
+      GOTO 40
+   50 KPHM=J
+      KFIX=NINT(FLOAT(NFIX)*FLOAT(KPHM)/100.0)
+      CALL SORTWF(FOMM,PHM,KH,KK,KL,KPHM)
+      DO 110 K=1,KFIX
+      CALL STANDARD(KH(K),KK(K),KL(K),PHM(K),KH2,KK2,KL2,PHM2,IDT)
+      DO 80 IM=1,NUMB
+      IF(KH2.EQ.JH(IM).AND.KK2.EQ.JK(IM).AND.KL2.EQ.JL(IM)) GOTO 100
+   80 CONTINUE
+      GOTO 110
+  100 MARK(IM)=-MARK(IM)
+      FOM(IM)=FOMM(K)
+      PHMAD=AMOD(PHM2+360.0,360.0)
+      IPHPP=MOD(IPHP(IM)+360,360)
+      IDPM=NINT(PHMAD)-IPHPP
+      IF(IABS(IDPM).GT.180) IDPM=-SIGN(1,IDPM)*(360-IABS(IDPM))
+      IDPH(IM)=IABS(IDPM)
+      IDPB(IM)=IDPM
+      MD=MD+1
+  110 CONTINUE
+  120 WRITE(6,150) MD
+  150 FORMAT(' NUMBER OF FIXED PHASES IS :',I8)
+      CLOSE (11)
+      RETURN
+      END
+C                            ----------------
+      SUBROUTINE              SORTWF(A,B,I1,I2,I3,N)
+C                               SORT ON A
+      DIMENSION A(N),B(N),I1(N),I2(N),I3(N)
+      INT=2
+   10 INT=2*INT
+      IF (INT.LT.N) GO TO 10
+      INT=MIN0(N,(3*INT)/4-1)
+   20 INT=INT/2
+      IFIN=N-INT
+      DO 70 II=1,IFIN
+      I=II
+      J=I+INT
+      IF (A(I).GE.A(J)) GO TO 70
+      T=A(J)
+      X=B(J)
+      L1=I1(J)
+      L2=I2(J)
+      L3=I3(J)
+   40 A(J)=A(I)
+      B(J)=B(I)
+      I1(J)=I1(I)
+      I2(J)=I2(I)
+      I3(J)=I3(I)
+      J=I
+      I=I-INT
+      IF (I.LE.0) GO TO 60
+      IF (A(I).LT.T) GO TO 40
+   60 A(J)=T
+      B(J)=X
+      I1(J)=L1
+      I2(J)=L2
+      I3(J)=L3
+   70 CONTINUE
+      IF (INT.GT.1) GO TO 20
+      RETURN
+      END
+C
+C-----------------------------------------------------------------------
+      SUBROUTINE FITDPH
+      PARAMETER ( MAXRE=800000 )
+C     RESTRICT PHASE DIFFERENCES FOR SPECIAL REFLECTIONS AND
+C     FIT THE GENERAL PHASE DIFFERENCES TO A UNIFORM DISTRIBUTION
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /TABL/ SINT(451),DTOR
+      DIMENSION MH(3),IH(3)
+      NUMF=NUMB
+C     FIND AND SEPARATE CENTRIC REFLECTIONS
+      DO 100 J=1,NUMB
+      IH(1)=JH(J)
+      IH(2)=JK(J)
+      IH(3)=JL(J)
+      MARK(J)=2
+      DO 60 I=1,NSYM
+      IHT=0
+      DO 50 K=1,3
+      MH(K)=IS(K,1,I)*IH(1) + IS(K,2,I)*IH(2) + IS(K,3,I)*IH(3)
+      ICHK=IABS(MH(K)+IH(K))
+      IF(ICHK.EQ.0) IHT=IHT+1
+   50 CONTINUE
+      IF(IHT.EQ.3) MARK(J)=1
+      IF(IHT.EQ.3) GO TO 80
+   60 CONTINUE
+      GOTO 100
+   80 NUMF=NUMF-1
+      COSDP(J)=COSDP(J)-5000.0
+  100 CONTINUE
+      CALL SORT(COSDP,10,13)
+      IF(IFIT.EQ.1) GOTO 150
+      DO 120 I=1,NUMF
+      IDPH(I)=ACOS(SIGN(1.0,COSDP(I))*AMIN1(1.0,ABS(COSDP(I))))/DTOR+0.5
+  120 CONTINUE
+      GOTO 600
+C     FIT THE REST REFLECTIONS TO A UNIFORM DISTRIBUTION
+  150 DO 200 I=1,NUMF
+      IDPH(I)=I*180.0/NUMF+0.5
+  200 CONTINUE
+C     RESTRICT PHASE DIFFERENCES FOR THE SEPARATED REFLECTIONS
+  600 DO 700 I=NUMF+1,NUMB
+      IDPH(I)=90
+      IF(MOD(IDTYPE,2).EQ.1) GOTO 700
+      IPHP(I)=MOD(IPHP(I)+90,360)
+  700 CONTINUE
+      IF(JSUB.EQ.1) CALL SUBDPH
+      IF(PHCOMP.EQ.0.0) GOTO 900
+      DO 800 I=1,NUMB
+      IDEF=ITPH(I)-IPHP(I)
+      IF(ABS(IDEF).GT.180) IDEF=ISIGN(1,IDEF)*(ABS(IDEF)-360)
+      ISDP(I)=ISIGN(1,IDEF)
+      IF(MOD(IDEF,180).EQ.0) ISDP(I)=0
+  800 CONTINUE
+  900 RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE READER
+      PARAMETER ( MAXRE=800000 )
+C     READ REFLECTIONS FROM FORMATTED DATA FILE: '*.TM1'
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      CHARACTER FM*130,CFM*21
+      CFM='1234567890., ()EFHIX/'
+      NRP=0
+      NLP=0
+Cph   PHCOMP=0.0
+      TEST=0.0
+   10 READ(1,'(A130)') FM
+Cph   IF(INDEX(FM,'TPHI').GT.0) PHCOMP=1.0
+      DO 20 I=1,LEN(FM)
+      IF(INDEX(CFM,FM(I:I)).EQ.0) GOTO 10
+      IF(FM(I:I).NE.' ') TEST=1.0
+      IF(FM(I:I).EQ.'(') NRP=NRP+1
+      IF(FM(I:I).EQ.')') NLP=NLP+1
+   20 CONTINUE
+      IF(TEST.LT.0.5) GOTO 10
+      IF((NRP+NLP).EQ.0.OR.NRP.NE.NLP) GOTO 10
+      I=0
+      IF(PHCOMP.GT.0.5) GOTO 30
+   25 I=I+1
+      READ(1,FM,END=60) JH(I),JK(I),JL(I),FO(I),SF0(I),DANO(I),
+     1           SIGDANO(I),E(I),SIGE(I),COSDP(I),FH(I),FC(I),IPHP(I),
+     1           ESGMH(I),XKP(I),DELT(I),RSL(I)
+C      ESGMH(I)=MAX(ESGMH(I),0.2)
+      GOTO 25
+   30 I=I+1
+      READ(1,FM,END=60) JH(I),JK(I),JL(I),FO(I),SF0(I),DANO(I),
+     1          SIGDANO(I),E(I),SIGE(I),COSDP(I),FH(I),FC(I),IPHP(I),
+     1          ESGMH(I),XKP(I),DELT(I),RSL(I),ITPH(I)
+C      ESGMH(I)=MAX(ESGMH(I),0.2)
+      GOTO 30
+   60 NUMB=I-1
+      CALL FITDPH
+C1    CLOSE (1,STATUS='DELETE',ERR=70)
+      CLOSE (1)
+ 70   CONTINUE 
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE SETUP(NIOR,KUSER2)
+      PARAMETER ( MAXRE=800000 )
+C     ARRANGE REFLECTION DATA AND SET UP ARRAYS OF EQUIVALENT REFLECTIONS
+      COMMON /AAAA/ IR1(MAXRE*6),IR2(MAXRE*6),LOC(MAXRE*6),I1(3),I2(3),
+     1              NOUSE(24168)
+      COMMON /CNST/ SGM32,ITLE(80)
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /TABL/ SINT(451),DTOR
+      CHARACTER ITLE
+      NIP=1
+      NIOR=0
+C     GENERATE SYMMETRY RELATED REFLECTIONS
+      DO 480 II=1,NUMB
+      I1(1)=JH(II)
+      I1(2)=JK(II)
+      I1(3)=JL(II)
+      DO 450 J=1,NSYM
+      KL1=0
+      DO 200 I=1,3
+      KL1=KL1 - I1(I)*ITS(I,J)
+      I2(I)=IS(I,1,J)*I1(1) + IS(I,2,J)*I1(2) + IS(I,3,J)*I1(3)
+  200 CONTINUE
+      KL3=256*I2(1) + I2(2)
+      KL2=1
+      IF (KL3 .LT. 0) KL2=-1
+      IF (KL3 .EQ. 0 .AND. I2(3) .LT. 0) KL2=-1
+      KL3=IABS(KL3)
+      KL4=I2(3)*KL2
+      KL1=MOD(KL1*KL2+2400, 24)
+C     ELIMINATE DUPLICATIONS AND USE KL2 +VE AS FAR AS POSSIBLE
+      IF (J .EQ. 1) GOTO 300
+      DO 240 I=NIP,NIOR
+      IF (KL3 .NE. IR1(I) .OR. KL4 .NE. IR2(I)) GOTO 240
+      IF (LOC(I) .LT. 0) LOC(I)=(24*II + KL1)*KL2
+      GOTO 450
+  240 CONTINUE
+C     STORE PACKED INDICES IN IOR AND CODE IN LOC
+  300 NIOR=NIOR+1
+      IF (NIOR .GT. KUSER2) GOTO 500
+      IR1(NIOR)=KL3
+      IR2(NIOR)=KL4
+      LOC(NIOR)=(24*II + KL1)*KL2
+  450 CONTINUE
+      NIP=NIOR + 1
+  480 CONTINUE
+      GOTO 900
+C     TOO MANY REFLECTIONS FOR EXPANSION TO HEMISPHERE - IGNORE EXTRA
+  500 NUMB=II - 1
+      NIOR=NIP - 1
+      WRITE(6,520) NUMB
+  520 FORMAT('WARNING !!! TOO MANY REFLECTIONS FOR EXPANSION TO',
+     1 ' HEMISPHERE'/2X,'HAVE GONE BEYOND KUSER2',I8,' REFLECTION',
+     2 ' ACCEPT ONLY.')
+  900 WRITE(6,920) NUMB,NIOR
+  920 FORMAT(/6X,I8,' REFLECTIONS HAVE BEEN EXPANDED TO HEMISPHERE FOR',
+     1 I10)
+C     SORT PACKED INDICES KEEPING TRACK OF ADDRESS IN LOC
+      IND=NIOR
+ 1020 IND=IND/2
+      IF (2*(IND/2) .EQ. IND) IND=IND - 1
+      IFIN=NIOR - IND
+      DO 1120 II=1,IFIN
+      I=II
+      J=I + IND
+      IF (IR1(I) - IR1(J)) 1120,1030,1040
+ 1030 IF (IR2(I) .LE. IR2(J)) GOTO 1120
+ 1040 K=IR1(J)
+      L=IR2(J)
+      M=LOC(J)
+ 1060 IR1(J)=IR1(I)
+      IR2(J)=IR2(I)
+      LOC(J)=LOC(I)
+      J=I
+      I=I - IND
+      IF (I .LE. 0) GOTO 1100
+      IF (IR1(I) - K) 1100,1080,1060
+ 1080 IF (IR2(I) .GT. L) GOTO 1060
+ 1100 IR1(J)=K
+      IR2(J)=L
+      LOC(J)=M
+ 1120 CONTINUE
+      IF (IND .GT. 1) GOTO 1020
+      RETURN
+      END
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+C                                                                      C
+C           SSSSS   IIIII   GGGGG   M     M     A      22222           C
+C          S     S    I    G     G  MM   MM    A A    2     2          C
+C          S          I    G        M M M M   A   A         2          C
+C           SSSSS     I    G  GGGG  M  M  M  A     A     222           C
+C                S    I    G     G  M     M  AAAAAAA   22              C
+C          S     S    I    G     G  M     M  A     A  2                C
+C           SSSSS   IIIII   GGGGGG  M     M  A     A  2222222          C
+C                                                                      C
+C              PROGRAM FOR SETTING UP SIGMA2 RELATIONSHIPS             C
+C                             VERSION 1992                             C
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+      SUBROUTINE SIGMA2(NIOR)
+      PARAMETER ( MAXRE=800000 )
+C     SET UP PHASE RELATIONSHIPS WITH CORRECT SPACE GROUP WEIGHTING
+      COMMON /AAAA/ IR1(MAXRE*6),IR2(MAXRE*6),LOC(MAXRE*6),STABLE(30),
+     1 KNOW1(24),KNOW2(24),KNOW3(24),KNOW4(24),KNOW5(24),KNOW6(24),
+     2 IPH1(8000),IPH2(8000),EEE(8000)
+      COMMON /CNST/ SGM32,ITLE(80)
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /TABL/ SINT(451),DTOR
+      CHARACTER ITLE
+C     T(U)=U*U*(U+0.4807)/((U+0.8636)*U+1.3943)
+C     MAX NO RELATIONSHIPS FOR A REFLECTION - DIMENSION OF IPH1,IPH2,EEE
+      MAXREL=8000
+      IDK=0
+      IF(KMIN.NE.0) IDK=1
+      IF(KMIN.NE.0) GOTO 500
+C     SET UP KMIN VALUE
+      KMIN=3
+      IF(NUMB.LT.10000) KMIN=2
+      IF(NUMB.LT.10000) GOTO 500
+      IF(NUMB.GT.40000) KMIN=4
+      IF(NUMB.GT.80000) KMIN=5
+  500 EE3MIN=KMIN
+      NS=2
+      NSR=0
+      NSRT=1
+      IPH1(1)=0
+      IPH2(1)=1
+      IFAZQ=0
+      JUG=0
+C     SET UP SINE/COSINE TABLE
+      DO 1000 I=1,30
+      STABLE(I)=SIN(15.0*DTOR*FLOAT(I-1))
+ 1000 CONTINUE
+C     INPUT REFLECTION INDICES
+      NN=NUMB
+C     SET UP RELATIONSHIPS FOR EACH REFLECTION IN TURN
+ 1010 DO 1500 I=1,NN
+      IF (JUG.EQ.1) GOTO 1420
+      INDEX1=256*JH(I)+JK(I)
+      INDEX2=JL(I)
+      ISG=-1
+      IND1=NIOR
+      IND2=NIOR
+C     MOVE POINTER UP ARRAY
+ 1020 IND1=IND1 - 1
+      IF (IND1 .LE. 0) GOTO 1100
+ 1040 IF (IR1(IND2)-IR1(IND1)-INDEX1) 1020,1060,1080
+ 1060 IF (IR2(IND2)-IR2(IND1)-INDEX2) 1020,1200,1080
+ 1080 IND2=IND2 - 1
+      GOTO 1040
+ 1100 ISG=1
+C     MOVE POINTER DOWN ARRAY
+ 1120 IND1=IND1 + 1
+      IF (IND1 .GE. IND2) GOTO 1400
+ 1140 IF (IR1(IND2)+IR1(IND1)-INDEX1) 1120,1160,1180
+ 1160 IF (IR2(IND2)+IR2(IND1)-INDEX2) 1120,1200,1180
+ 1180 IND2=IND2 - 1
+      IF (IND1 - IND2) 1140,1400,1400
+C     REMOVE 3-FOLD DUPLICATION AND SIGMA1 RELATIONSHIPS
+ 1200 J=IABS(LOC(IND1))/24
+      K=IABS(LOC(IND2))/24
+      IF (J .EQ. K) GOTO 1320
+      IF (I .LE. J .OR. I .LE. K) GOTO 1320
+C     SET UP RELATIONSHIP
+ 1210 EE3=SGM32*E(I)*E(J)*E(K)
+      EE3=IFIX(ABS(EE3))
+      IF (EE3 .LT. EE3MIN) GOTO 1320
+      IPH1(NSRT+1)=ISIGN(J, LOC(IND1))*ISG
+      IPH2(NSRT+1)=ISIGN(K, LOC(IND2))
+      IFZ=ISG*MOD(IABS(LOC(IND1)),24) + MOD(IABS(LOC(IND2)),24)
+      IFAZE=MOD(IFZ+IFAZQ+240, 24)
+      EEE(NSRT+1)=0.01*(EE3 + 0.01*FLOAT(IFAZE))
+      IF (K .LT. J) GOTO 1215
+      L=IPH1(NSRT+1)
+      IPH1(NSRT+1)=IPH2(NSRT+1)
+      IPH2(NSRT+1)=L
+C     TEST FOR DUPLICATIONS
+ 1215 IF (NSRT .LT. NS) GOTO 1240
+      DO 1220 L=NS,NSRT
+      IF (IABS(IPH1(NSRT+1)) .NE. IABS(IPH1(L))) GOTO 1220
+      IF (IABS(IPH2(NSRT+1)) .NE. IABS(IPH2(L))) GOTO 1220
+      IF (IPH1(L) .NE. IPH1(NSRT+1)) GOTO 1320
+      IF (IPH2(L) - IPH2(NSRT+1)) 1320,1260,1320
+ 1220 CONTINUE
+C     ACCEPT NEW RELATIONSHIP
+ 1240 NSR=NSR + 1
+      IF (IDK.EQ.1) GOTO 1250
+C     IT IS BETTER TO KEEP THE NUMBER OF STRUCTURE INVARIANT
+      IF (NSR.LE.200*MAXRE) GOTO 1250
+      FI1=FLOAT(I)
+      FNN=FLOAT(NN)
+      PINN=FI1/FNN
+      IF (PINN.GE.0.85) GOTO 1250
+      IF (PINN.LE.0.45) KMIN=KMIN+2
+      IF (PINN.LE.0.45) GOTO 500
+      IF (PINN.LT.0.85) KMIN=KMIN+1
+      IF (PINN.LT.0.85) GOTO 500    
+ 1250 NSRT=NSRT + 1
+      IF (NSRT - MAXREL) 1320,1420,1420
+C     RELATIONSHIP ALREADY FOUND - ADD THEM TOGETHER
+ 1260 E3=IFIX(100.0*EEE(L) + 0.5)
+      IFZ=100.0*(100.0*EEE(L) - E3) + 1.5
+      SR=EE3*STABLE(IFAZE+7) + E3*STABLE(IFZ+6)
+      SI=EE3*STABLE(IFAZE+1) + E3*STABLE(IFZ)
+      EE3=IFIX(SQRT(SR*SR + SI*SI) + 0.5)
+      IFAZE=(ATAN2(SI,SR)/DTOR + 360.0)/15.0 + 0.5
+      IFAZE=MOD(IFAZE, 24)
+      EEE(L)=0.01*(EE3 + 0.01*FLOAT(IFAZE))
+C     RETURN TO LOOK FOR NEXT RELATIONSHIP
+ 1320 IF (ISG) 1020,1500,1120
+C     FOUND ALL THE RELATIONSHIPS FOR THIS REFLECTION
+ 1400 NSRT=NSRT + 1
+      IPH1(NSRT)=0
+      IPH2(NSRT)=I + 1
+      IF (NSRT .LT. 3000) GOTO 1460
+ 1420 DO 1430 L1=1,3000
+      IF(IPH1(L1).EQ.0) GOTO 1430
+      IFZ1=100.0*(100.0*EEE(L1) - FLOAT(IFIX(100.0*EEE(L1)+0.5)))+0.5
+      IE31=INT(100.0*EEE(L1) + 0.5)
+      IPH1(L1)=65536*IFZ1+(16384-IPH1(L1))
+      IPH2(L1)=65536*IE31+(16384-IPH2(L1))
+ 1430 CONTINUE
+      WRITE (3) (IPH1(L),L=1,3000),(IPH2(L),L=1,3000)
+      IF(JUG.EQ.1) GOTO 1600
+      DO 1440 L=3001,NSRT
+      IPH1(L-3000)=IPH1(L)
+      IPH2(L-3000)=IPH2(L)
+      EEE(L-3000)=EEE(L)
+ 1440 CONTINUE
+      NSRT=NSRT - 3000
+      IF (NSRT+3000 .EQ. MAXREL) GOTO 1320
+      IF (NSRT .GE. 3000) GOTO 1420
+ 1460 NS=NSRT + 1
+ 1500 CONTINUE
+      JUG=1
+      GOTO 1010
+ 1600 XKMN=FLOAT(KMIN)/100.0
+      WRITE (6,1900) XKMN,NSR
+ 1900 FORMAT(/25X,'MINIMUM VALUE OF KAPPA  =',F7.3
+     1 //20X,'NUMBER OF PHASE RELATIONSHIPS  =',I10)
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE SORT(A,NI,NF)
+      PARAMETER ( MAXRE=800000 )
+      COMMON /RFLX/ NUMB,IP(MAXRE,11),FP(MAXRE,16)
+      DIMENSION A(MAXRE),IP1(11),FP1(16)
+      INT=NUMB
+  100 INT=INT/2
+      IF(2*(INT/2).EQ.INT) INT=INT-1
+      IFIN=NUMB-INT
+      DO 1000 II=1,IFIN
+      I=II
+      J=I+INT
+      IF(A(I).GE.A(J)) GOTO 1000
+      A1=A(J)
+      DO 200 K=1,NI
+      IP1(K)=IP(J,K)
+  200 CONTINUE
+      DO 300 K=1,NF
+      FP1(K)=FP(J,K)
+  300 CONTINUE
+  400 DO 500 K=1,NI
+      IP(J,K)=IP(I,K)
+  500 CONTINUE
+      DO 600 K=1,NF
+      FP(J,K)=FP(I,K)
+  600 CONTINUE
+      J=I
+      I=I-INT
+      IF(I.LE.0) GOTO 700
+      IF(A(I).LT.A1) GOTO 400
+  700 DO 800 K=1,NI
+      IP(J,K)=IP1(K)
+  800 CONTINUE
+      DO 900 K=1,NF
+      FP(J,K)=FP1(K)
+  900 CONTINUE
+ 1000 CONTINUE
+      IF(INT.GT.1) GOTO 100
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE ISORT(IA,NI,NF)
+      PARAMETER ( MAXRE=800000 )
+      COMMON /RFLX/ NUMB,IP(MAXRE,11),FP(MAXRE,16)
+      DIMENSION IA(MAXRE),IP1(11),FP1(16)
+      INT=NUMB
+  100 INT=INT/2
+      IF(2*(INT/2).EQ.INT) INT=INT-1
+      IFIN=NUMB-INT
+      DO 1000 II=1,IFIN
+      I=II
+      J=I+INT
+      IF(IA(I).GE.IA(J)) GOTO 1000
+      IA1=IA(J)
+      DO 200 K=1,NI
+      IP1(K)=IP(J,K)
+  200 CONTINUE
+      DO 300 K=1,NF
+      FP1(K)=FP(J,K)
+  300 CONTINUE
+  400 DO 500 K=1,NI
+      IP(J,K)=IP(I,K)
+  500 CONTINUE
+      DO 600 K=1,NF
+      FP(J,K)=FP(I,K)
+  600 CONTINUE
+      J=I
+      I=I-INT
+      IF(I.LE.0) GOTO 700
+      IF(IA(I).LT.IA1) GOTO 400
+  700 DO 800 K=1,NI
+      IP(J,K)=IP1(K)
+  800 CONTINUE
+      DO 900 K=1,NF
+      FP(J,K)=FP1(K)
+  900 CONTINUE
+ 1000 CONTINUE
+      IF(INT.GT.1) GOTO 100
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE SUBDPH
+      PARAMETER ( MAXRE=800000 )
+C     READ KNOWN PHASES THEN CALCULATING & SUBSTITUTING DELTA PHASES
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      CHARACTER FM*120,CFM*21
+      CFM='1234567890., ()EFHIX/'
+      OPEN(9,FILE='SUBPHS.TM',FORM='FORMATTED',STATUS='UNKNOWN')
+      NRP=0
+      NLP=0
+      TEST=0.0
+   10 READ(9,'(A120)') FM
+      DO 20 I=1,LEN(FM)
+      IF(INDEX(CFM,FM(I:I)).EQ.0) GOTO 10
+      IF(FM(I:I).NE.' ') TEST=1.0
+      IF(FM(I:I).EQ.'(') NRP=NRP+1
+      IF(FM(I:I).EQ.')') NLP=NLP+1
+   20 CONTINUE
+      IF(TEST.LT.0.5) GOTO 10
+      IF((NRP+NLP).EQ.0.OR.NRP.NE.NLP) GOTO 10
+      I=0
+      IHIT=0
+   30 READ(9,FM,END=80) KH,KK,KL,PHDM
+      I=I+1
+      DO 50 J=1,NUMB
+      IF(KH.EQ.JH(J).AND.KK.EQ.JK(J).AND.KL.EQ.JL(J)) GOTO 60
+   50 CONTINUE
+      GOTO 30
+   60 PHDM=AMOD(PHDM+720.0,360.0)
+      IDPH(J)=NINT(PHDM)
+      IHIT=IHIT+1
+      GOTO 30
+   80 WRITE(6,90) IHIT
+   90 FORMAT(17X,'NUMBER OF SUBSTITUTED DELTA PHASES IS ',I7)
+      CLOSE (9)
+      RETURN
+      END
+C-----------------------------------------------------------------------
+      SUBROUTINE OSIGN
+      PARAMETER ( MAXRE=800000 )
+      COMMON /CNST/ SGM32,ITLE(80)
+      COMMON /RFLX/ NUMB,JH(MAXRE),JK(MAXRE),JL(MAXRE),IDPH(MAXRE),
+     1 IPHP(MAXRE),ITPH(MAXRE),IORD(MAXRE),ISDP(MAXRE),IDPB(MAXRE),
+     2 MARK(MAXRE),IDPC(MAXRE),FO(MAXRE),SF0(MAXRE),DANO(MAXRE),
+     3 SIGDANO(MAXRE),E(MAXRE),SIGE(MAXRE),FH(MAXRE),RSL(MAXRE),
+     4 XKP(MAXRE),DELT(MAXRE),ESGMH(MAXRE),COSDP(MAXRE),FC(MAXRE),
+     5 PROB(MAXRE),FOM(MAXRE),SPOS(MAXRE)
+      COMMON /USER/ ISGM2,KMIN,NCYC,PHCOMP,IXRAN,IYRAN,RSLIM,LIST,
+     1 IDTYPE,IFIT,JSKIP,TRIAL,KFOM,JSUB,JFIX,NFIX,IDPHB,RSL0
+      COMMON /SYMT/ IS(3,3,24),ITS(3,24),NSYM,LATT,ICENT,PARA(6),NASU,
+     1              TS(3,24),NSPGR
+      COMMON /AAAA/ IPHB(MAXRE),IPHM(MAXRE),IPHC(MAXRE),IPHAV(MAXRE),
+     1              IPH1(3000),IPH2(3000),NOUSE(11218174)
+      COMMON /CCP4_SYM/ NSYMM, MSYMP, NSPGRX, SPGRN, PGNAM, RSM, LTYPE
+      COMMON/HLUSER/ IIN,INC,NVAR,P(72),PLOG(72),STAB(451)
+      COMMON/HLFLAG/HL_FLAG
+      integer HL_FLAG
+      real hend(4)
+      real ppp,lcerr,pcur,phpin,phpout,ppos,pneg,fpc,sig,csym
+      CHARACTER ITLE
+      DIMENSION HH(MAXRE),HK(MAXRE),HL(MAXRE),FNAT(MAXRE),SFNAT(MAXRE),
+     1          PHASE(MAXRE),FIGMRT(MAXRE),IMARK(MAXRE),PHPO(MAXRE),
+     2          HLA(MAXRE),HLB(MAXRE),HLC(MAXRE),HLD(MAXRE)
+      CHARACTER*30 LABOUT(11)
+      CHARACTER*1 CTYPOUT(11)
+      LOGICAL EOF
+      CHARACTER*4 KEY, CCVAL(20)
+      CHARACTER*400 LINE
+      CHARACTER*80 HSTR
+      INTEGER NTOK, IBEG(20), IEND(20), ITYP(20), IDEC(20)
+      REAL FVAL(20)
+      DIMENSION ADATA1(11)
+
+      INTEGER HKLOUT, MTZSORT(5)
+
+C     --- SYMLIB, MTZLIB ---
+      CHARACTER*1 LTYPE
+      CHARACTER*10 PGNAM,SPGRN
+      INTEGER NUMSGP,NSYMM,MSYMP,MLAUE,IHKL(3),JHKL(3),ISYM,LSYM
+      REAL RSM(4,4,192),PHASIN,PHSOUT
+C
+      DATA LABOUT/'H','K','L','FP','SIGFP','PHIB','FOM','HLA',
+     $      'HLB','HLC','HLD'/
+      DATA CTYPOUT/'H','H','H','F','Q','P','W','A','A','A','A'/
+      DATA HSTR/'CREATED BY THE PROGRAM OASIS'/
+      DATA MTZSORT/1,1,1,0,0/
+
+      HKLOUT=2
+      CALL MTZINI
+C
+C  Open MTZ file for write
+C          *************************
+      CALL LWOPEN (HKLOUT, 'HKLOUT')
+C          *************************
+C
+C   Append to the history information in the MTZ header
+      CALL LWHIST (HKLOUT, HSTR, 1)
+
+      IAPPND = 0
+      NLABOUT = 11
+C
+C   Set up the output column assignments, new columns etc.
+      CALL LWASSN(HKLOUT,LABOUT,NLABOUT,CTYPOUT,IAPPND)
+      
+C
+C   SET IFLAG = 0 TO REPLACE OLD TITLE IF LTITLE = .TRUE..
+C
+      IFLAG = 0
+C
+C   Append to or replace the title in the MTZ header
+      CALL LWTITL(HKLOUT,"OASIS-4.2",IFLAG)
+C
+C   WRITE A HISTORY LINE.
+      CALL LWHSTL (HKLOUT, 'OASIS-4.2')
+C
+C   WRITE CELL PARAMETERS.
+      CALL LWCELL (HKLOUT, PARA)
+C
+C   Update the Symmetry operation in the MTZ header
+      CALL LWSYMM(HKLOUT,NSYMM,MSYMP,RSM,LTYPE,
+     *      NSPGRX,SPGRN,PGNAM)
+C
+C   Subroutine ASUSET ...
+C   Set up & store symmetry information for later use in ASUPUT
+      CALL ASUSET(SPGRN,NSPGRX,PGNAM,NSYMM,RSM,MSYMP,MLAUE,.FALSE.)
+C
+C   Update the Sort order in the MTZ header
+      CALL LWSORT(HKLOUT, MTZSORT)
+      DTOR=3.14159/180.
+      YY = 0.0
+      DO 100 I = 1, 451
+      STAB(I) = SIN(YY*DTOR)
+      IF(ABS(STAB(I))<1.e-4) STAB(I)=0.0
+ 100  YY = YY + 1.0
+       DO 200 K=1,NUMB
+        IHKL(1)=JH(K)
+        IHKL(2)=JK(K)
+        IHKL(3)=JL(K)
+C
+C Put reflection into symmetric unit defined by call to ASUSET
+        CALL ASUPUT(IHKL,JHKL,ISYM)
+C
+C REAL-SPACE SYMMETRY OPERATION NUMBER L = (ISYM-1)/2 + 1
+        LSYM = (ISYM-1)/2 + 1
+        PHASIN=FLOAT(IPHB(K))
+        PHPIN=FLOAT(IPHP(K))
+        IISIGN = MOD(ISYM,2)*2 - 1
+           IF (IISIGN .GT. 0) THEN
+C   IISIGN=1 for I+
+               FASETRANS = 0.0
+             DO 280 JD0300 = 1,3
+               FASETRANS=FASETRANS+
+     *           FLOAT(IHKL(JD0300))*RSM(JD0300,4,LSYM)
+ 280         CONTINUE
+             PHSOUT = MOD(PHASIN - 360.0*FASETRANS+36000.0,360.0)
+C---PHP should be operated following PHIB
+             PHPOUT = MOD(PHPIN - 360.0*FASETRANS+36000.0,360.0)
+           ELSE IF (IISIGN .LT. 0) THEN
+C   IISIGN=-1 for I-
+               FASETRANS = 0.0
+             DO 290 JD0300 = 1,3
+               FASETRANS=FASETRANS+
+     *           FLOAT(IHKL(JD0300))*RSM(JD0300,4,LSYM)
+ 290         CONTINUE
+             PHSOUT = MOD(-PHASIN + 360.0*FASETRANS+36000.0,360.0)
+             PHPOUT = MOD(PHPIN - 360.0*FASETRANS+36000.0,360.0)
+          END IF
+        CALL ASUPHP(JHKL,LSYM,IISIGN,PHASIN,PHSOUT1)
+C        write(6,'(2F8.2)') phsout , phsout1
+        HH(K)=FLOAT(JHKL(1))
+        HK(K)=FLOAT(JHKL(2))
+        HL(K)=FLOAT(JHKL(3))
+        PHASE(K)=PHSOUT
+        PHPO(K)=PHPOUT
+        IMARK(K)=-((JHKL(1)+128)*65536+(JHKL(2)+128)*256+JHKL(3)+128)
+
+        FNAT(K)=FO(K)
+        SFNAT(K)=SF0(K)
+        FIGMRT(K)=FOM(K)
+
+C        PHPIN=FLOAT(IPHP(K))
+C        CALL ASUPHP(JHKL,LSYM,IISIGN,PHPIN,PHPOUT)
+C        IPHP(K)=INT(PHPOUT)
+
+
+  200 CONTINUE
+      no_hl=0  
+      if(idtype>2.or.hl_flag.eq.1) no_hl=1
+      if(no_hl.eq.1) goto 350 
+      write(6,*)'Begin to calculate HL coefficents...'
+      do 300 i=1,numb
+      icent=icentric(jh(i),jk(i),jl(i),csym)
+      if(icent.eq.0) then
+      IIN=1
+      INC=5
+      sum=0.0
+      ii=0
+      sumlcerr=0.
+      if(sigdano(i)<0.001) sigdano(i)=0.001
+C----SAD SITUATION
+      if(idtype.eq.1) then
+      do 250 j=IIN,360,INC
+      ii=ii+1
+      pcur=(phpo(i)-j+1.-90.)*dtor
+      lcerr=dano(i)+2*fh(i)*sin(pcur)
+      p(ii)=lcerr**2
+      sumlcerr=p(ii)+sumlcerr
+ 250  continue
+      else
+C----SIR SITUATION
+      do 260 j=IIN,360,INC
+      ii=ii+1
+      pcur=(float(j)-1.-phpo(i))*dtor
+      ppp=fnat(i)-dano(i)
+      lcerr=ppp**2+fh(i)**2+2*ppp*fh(i)*cos(pcur)-fnat(i)**2
+      p(ii)=lcerr**2
+      sumlcerr=sumlcerr+p(ii)
+ 260  continue
+Cw
+Cw    fnat(i)=ppp
+Cw    if(sigdano(i)>sfnat(i)) then
+Cw    sfnat(i)=sqrt(sigdano(i)**2-sfnat(i)**2)
+Cw    endif
+Cw
+      endif
+      if(sumlcerr<0.001)sumlcerr=0.001
+      sumlcerr=sumlcerr/ii
+      ii=0
+      do 265 J=IIN,360,INC
+      ii=ii+1
+      p(ii)=exp(-1.0*p(ii)/(sigdano(i)**2+sumlcerr))
+      sum=p(ii)+sum
+ 265  continue
+      ii=0
+      if(sum.le.0) sum=1.E-30
+      do 270 j=iin,360,inc
+      ii=ii+1
+      p(ii)=p(ii)/sum
+      if(p(ii)<0.000001) p(ii)=0.000001
+      plog(ii)=log(p(ii))
+ 270  continue
+      else
+      INC=180
+      iin=int(phase(i))
+      p(1)=prob(i)
+C----for centric reflecton
+C----P(1)>P(2)>0.0
+C----P(1)+P(2)=1.0
+      if(p(1)<0.5) p(1)=1.-p(1)
+      p(2)=1.-p(1)
+      if(p(2)<0.0001) p(2)=0.0001
+      plog(1)=log(p(1))
+      plog(2)=log(p(2))
+      endif
+      call hendft(hend)
+      hla(i)=hend(1)
+      hlb(i)=hend(2)
+      hlc(i)=hend(3)
+      hld(i)=hend(4)
+ 300  continue
+      write(6,*)'        End of HL calculation'
+ 350  continue
+C  SORT BY H, K, L
+      DO II=NUMB, 2, -1
+        DO JJ=1, II-1
+          IF(IMARK(JJ).LT.IMARK(II)) THEN
+            HH0=HH(JJ)
+            HK0=HK(JJ)
+            HL0=HL(JJ)
+            FNAT0=FNAT(JJ)
+            SFNAT0=SFNAT(JJ)
+            PHASE0=PHASE(JJ)
+            FIGMRT0=FIGMRT(JJ)
+            IMARK0=IMARK(JJ)
+            SHLA=HLA(JJ)
+            SHLB=HLB(JJ)
+            SHLC=HLC(JJ)
+            SHLD=HLD(JJ)
+
+            HH(JJ)=HH(II)
+            HK(JJ)=HK(II)
+            HL(JJ)=HL(II)
+            FNAT(JJ)=FNAT(II)
+            SFNAT(JJ)=SFNAT(II)
+            PHASE(JJ)=PHASE(II)
+            FIGMRT(JJ)=FIGMRT(II)
+            IMARK(JJ)=IMARK(II)
+            HLA(JJ)=HLA(II)
+            HLB(JJ)=HLB(II)
+            HLC(JJ)=HLC(II)
+            HLD(JJ)=HLD(II)
+
+            HH(II)=HH0
+            HK(II)=HK0
+            HL(II)=HL0
+            FNAT(II)=FNAT0
+            SFNAT(II)=SFNAT0
+            PHASE(II)=PHASE0
+            FIGMRT(II)=FIGMRT0
+            IMARK(II)=IMARK0
+            HLA(II)=SHLA
+            HLB(II)=SHLB
+            HLC(II)=SHLC
+            HLD(II)=SHLD
+
+          END IF
+        END DO
+      END DO
+       
+      
+      DO 400 K=1,NUMB
+      ADATA1(1)=HH(K)
+      ADATA1(2)=HK(K)
+      ADATA1(3)=HL(K)
+      ADATA1(4)=FNAT(K)
+      ADATA1(5)=SFNAT(K)
+      ADATA1(6)=PHASE(K)
+      ADATA1(7)=FIGMRT(K)
+C--- if don't need  output hl item ,they will be set to 0.0
+      if(no_hl.eq.1) then
+      ADATA1(8)=0.
+      ADATA1(9)=0.
+      ADATA1(10)=0.
+      ADATA1(11)=0.
+      else
+      ADATA1(8)=HLA(K)
+      ADATA1(9)=HLB(K)
+      ADATA1(10)=HLC(K)
+      ADATA1(11)=HLD(K)
+      endif
+C   Write a reflection record to the MTZ file
+      CALL LWREFL (HKLOUT,ADATA1)
+
+  400 CONTINUE
+
+      WRITE(6,*)
+C
+C   Close an MTZ file which has been opened for write
+      CALL LWCLOS(HKLOUT,1)
+
+      WRITE (6,*)
+      RETURN
+      END
+C     --------------------------------------------------------
+C     PROGRAM TO READ BROOKHAVEN FILE IN PDB FORMAT.
+C
+      SUBROUTINE PDBIN
+C
+      INTEGER NAMAX
+      PARAMETER (NAMAX=50000)
+      COMMON/XXX/P(6),CX(9),NREF,NPWP,RHOMAX,RHOMIN,EMAX,EMIN,
+     1 RHOCUT,RHOLOW,ZCG(8),ZOG(8),KMIN,ISGM2,NCYC,IFIT,NSREQ,
+     2 JSKIP,KFOM,NASU,IREFQB,IDPHB,RSL0
+      EQUIVALENCE (CELLP, P)
+      COMMON/XYZIN/NUMA,ATNAMIN(NAMAX),XIN(NAMAX),YIN(NAMAX),ZIN(NAMAX),
+     +                  OCCIN(NAMAX),BISOIN(NAMAX)
+      CHARACTER*4 ATNAMIN
+C     LOCAL.
+      REAL CELLP(6)
+      REAL X1,Y1,Z1,X2,Y2,Z2,OCC,BISO,U(6),VOLL,RRR(3,3,6)
+      INTEGER IFAIL,ISER,IRS,IXYZIN,IZ,IRET
+      CHARACTER*4 ATNAM,RESNAM,RESNO,SEGID,ID
+      CHARACTER*1 CHNNAM,ALTCOD,INSCOD
+C
+      EXTERNAL RBCELL,XYZADVANCE,XYZATOM,XYZCLOSE,XYZCOORD,
+     +         XYZINIT,XYZOPEN
+C
+      CALL XYZINIT
+C     
+C     OPEN FILE
+C     
+      IFAIL = 0
+      IXYZIN = 0
+      CALL XYZOPEN('XYZIN','INPUT',' ',IXYZIN,IFAIL)
+
+      IF(IFAIL.EQ.0) THEN
+
+C MAKE ORTH MATRICES THOSE OF MTZ FILES. ESPECIALLY NECESSARY IF
+C PDB FILE DOESN'T HAVE CRYST CARD.
+C      IF (CELLP(1).GT.0.0)
+C     +   CALL MMDB_F_ORTHMAT(IXYZIN,CELLP,VOLL,RRR,IRET)
+C     
+C     READ COORDINATE RECORDS
+C     
+      NUMA = 0
+   10 CONTINUE
+      IOUT =0
+      ITER = 0
+      CALL XYZADVANCE(IXYZIN,IOUT,ITER,*10,*100)
+      CALL XYZATOM(IXYZIN,ISER,ATNAM,RESNAM,CHNNAM,IRS,
+     +     RESNO,INSCOD,ALTCOD,SEGID,IZ,ID)
+      CALL XYZCOORD(IXYZIN,'F','U',X1,Y1,Z1,OCC,BISO,U)
+C     
+C     THIS PROGRAM CANNOT HANDLE ANISOTROPIC TEMPERATURE FACTORS
+C     SO SKIP ANY ANISOU CARDS FOUND
+C     
+      IF (U(2).NE.0.0 .OR. U(3).NE.0.0) THEN
+         IF (X1.EQ.0.0 .AND. Y1.EQ.0.0 .AND. Z1.EQ.0.0) GOTO 10
+      ENDIF
+      IF (IZ .GT. 10 .OR. IZ .LT. 3) GOTO 10
+      NUMA = NUMA + 1
+      IF (NUMA.GT.NAMAX) CALL CCPERR(1,
+     +     ' *** ERROR - THE NUMBER OF ATOMS IS TOO LARGE. ***')
+      ATNAMIN(NUMA) = ID
+      XIN(NUMA) = X1
+      YIN(NUMA) = Y1
+      ZIN(NUMA) = Z1
+      OCCIN(NUMA) = OCC
+      BISOIN(NUMA) = BISO
+      GO TO 10
+C     
+C     END OF FILE REACHED
+C     
+  100 CALL XYZCLOSE(IXYZIN)
+         WRITE(8,FMT='(A)') "FRA"
+         DO I = 1, NUMA
+           WRITE(8,FMT='(A6,I6,3F10.4,2F10.4)') 
+     +     ATNAMIN(I),I,XIN(I),YIN(I),ZIN(I),OCCIN(I),BISOIN(I)
+         END DO
+      ENDIF
+      WRITE(6,150) NUMA      
+  150 FORMAT(/1X,'NUMBER OF ATOMS OF PARTIAL STRUCTURE =', I7)
+      RETURN
+      END
+C     --------------------------------------------------------
+C     PROGRAM TO READ FRACTIONAL COORDINATES FILE IN OASIS FORMAT.
+C
+      SUBROUTINE FRAIN(MDLLINE,INPUTMODEL,IFRC)
+C
+      REAL XF,YF,ZF,OCC,BISO
+      INTEGER IORDER
+      CHARACTER*4 ATNAM
+      integer ibeg(7), iend(7), ityp(7), idec(7)
+      real fvalue(7)
+      character*4 cvalue(7)
+      character line*120
+ 
+      CHARACTER MDLLINE*240
+      LOGICAL INPUTMODEL      
+C
+      CALL CCPDPN(13,MDLLINE,'unknown','F',80,0)
+C
+      WRITE(8,FMT='(A)') "FRA"
+      IFRC=0
+   10 read(13,'(a120)',end=30) line
+      n=-7
+      
+c  Use CCP4 parser rather than free format read to avoid problems with
+c  space delimiters on Windows
+
+      call parse(line,ibeg,iend,ityp,fvalue,cvalue,idec,n)
+      atnam = cvalue(1)
+      iorder = nint(fvalue(2))
+      xf = fvalue(3)
+      yf = fvalue(4)
+      zf = fvalue(5)
+      occ = fvalue(6)
+      biso = fvalue(7)
+      IFRC=IFRC+1
+      WRITE(8,20) ATNAM,IORDER,XF,YF,ZF,OCC,BISO
+   20 FORMAT(A6,I6,3F10.4,2F10.4)
+      GOTO 10
+      
+   30 CONTINUE
+      WRITE(6,40) IFRC      
+   40 FORMAT(/1X,'NUMBER OF ATOMS OF PARTIAL STRUCTURE =', I7)
+      CLOSE (13)
+      END      
+C
+C
+      SUBROUTINE WRITECOPYRIGHT
+C
+      WRITE(6,100)
+ 100  FORMAT(/,'<FONT COLOR="#0000FF">',//,
+     &8X,'                                                           ',/
+     &8X,'       _/_/_/       _/      _/_/_/    _/_/_/_/_/  _/_/_/   ',/
+     &8X,'     _/     _/    _/_/    _/     _/      _/     _/     _/  ',/
+     &8X,'    _/     _/    _/ _/   _/             _/     _/          ',/
+     &8X,'   _/     _/   _/   _/    _/_/_/       _/       _/_/_/     ',/
+     &8X,'  _/     _/   _/_/_/_/         _/     _/             _/    ',/
+     &8X,' _/     _/  _/      _/ _/     _/     _/      _/     _/     ',/
+     &8X,'  _/_/_/   _/       _/  _/_/_/  _/_/_/_/_/    _/_/_/       ',/
+     &8X,'                                                           ',/
+     &8X,'                        4        2222                      ',/
+     &8X,'                       44       2    2                     ',/
+     &8X,'                      4 4           2                      ',/
+     &8X,'                     4  4         22                       ',/
+     &8X,'                    4444444     2                          ',/
+     &8X,'                        4    0  222222                     ',/
+     &8X,'                                                           ',/
+     &8X,'===========================================================',/
+     &8X,'                                                           ',/
+     &8X,'Please reference:                                          ',/
+     &8X,'                                                           ',/
+     &8X,' Ding, W., Zhang, T., He, Y., Wang, J.W., Wu, L.J., Han, P.',/
+     &8X,' Zheng, C.D., Hao, Q., Gu, Y.X. and Fan, H.F. (2018).      ',/
+     &8X,' OASIS4.2 - a computer program of direct-method phase      ',/
+     &8X,' extension based on a partial structure. Institute of      ',/
+     &8X,' Physics, Chinese Academy of Sciences, P.R. China.         ',/
+     &8X,' (available at http://cryst.iphy.ac.cn)                    ',/
+     &8X,'                                                           ',/
+     &8X,'===========================================================',/
+     &8X,/,'</FONT>',/)
+C
+      RETURN
+      END
+C
+      FUNCTION ICENTRIC(JH, JK, JL,CSYM)
+      COMMON/SYMMETRY/IS(3,3,24),TS(3,24),NSYM,PTS,KSYS,ICENT,LATT
+      DIMENSION MH(3), IH(3)
+      ICENTRIC=0
+      IH(1)=JH
+      IH(2)=JK
+      IH(3)=JL
+      DO 60 I=1, NSYM
+       IHT=0
+       DO 50 K=1,3
+        MH(K)=IS(K,1,I)*IH(1)+IS(K,2,I)*IH(2)+IS(K,3,I)*IH(3)
+        ICHK=IABS(MH(K)+IH(K))
+        IF(ICHK.EQ.0) IHT=IHT+1
+   50  CONTINUE
+       IF(IHT.EQ.3) THEN
+        DOT=0.
+        DO J=1,3
+         DOT=DOT+IH(J)*TS(J,I)
+        END DO
+        DOT_GT_ZERO=DOT*180.
+        DOT_GT_ZERO=AMOD(DOT_GT_ZERO+100.*360.,180.)
+        CSYM=INT(0.5+DOT_GT_ZERO)
+        GOTO 70
+       END IF
+   60 CONTINUE
+      GOTO 80
+   70 ICENTRIC=1
+   80 CONTINUE
+      RETURN
+      END
+C-----------------------------------------------------
+c	subroutines (hendft,matsol,fcnhend,lmdif1,lmdif,
+c	fdjac2,lmpar,qrfac,qrsolv) and functions 
+c	(spmpar,enorm) are all copied from solve 2.13.
+c	please reference to solve source for detail
+C-----------------------------------------------------
+      subroutine hendft(hend)
+      save
+      common /hluser/ iin,inc,nvar,p(72),plog(72),stab(451)
+      common /wu/ TRIX(126256),RHS(502),derivaw(502)
+      DOUBLEPRECISION TRIX,RHS,deriva
+      real p_calc(72),p_log_calc(72)
+      real hend(4)
+      external fcnhend
+      parameter(m=4)
+      parameter(lwa=m**2+6*m)
+      integer iwa(m)
+      real wa(lwa),yfit(m),fit(m),fit_sav(m)
+      real hend_try(4,10)
+      real wgt delta
+
+      tol=1.e-4
+      info=0
+      IF (INC .GT. 90) GOTO 1500
+
+c     first estimate coeffs 3 ways
+
+c     first starting point: just zeros
+      itry=1
+      do 3 i=1,4
+      hend_try(i,itry)=0.0
+ 3    continue
+
+c     second and third: FT (standard) coeffs
+      hendra=0.
+      hendrb=0.
+      hendrc=0.
+      hendrd=0.
+      cos_max=0.
+      sin_max=0.
+      prob_log_max=-1.e+30
+      prob_max=-1.e+30
+      amean_prob_log=0.
+      amean_prob_log_n=0.
+      ii=0
+      do 5 i=iin,360,inc
+      ii=ii+1
+      theta=float(i-1)*3.14159/180.
+      cost=cos(theta)
+      sint=sin(theta)
+      cos2t=cos(2.*theta)
+      sin2t=sin(2.*theta)
+      hendra=hendra+plog(ii)*cost
+      hendrb=hendrb+plog(ii)*sint
+      hendrc=hendrc+plog(ii)*cos2t
+      hendrd=hendrd+plog(ii)*sin2t
+
+      amean_prob_log=amean_prob_log+plog(ii)
+      amean_prob_log_n=amean_prob_log_n+1.
+      if(p(ii).gt.prob_max)then
+       prob_max=p(ii)
+       prob_log_max=plog(ii)
+       cos_max=cost
+       sin_max=sint
+      endif
+ 5    continue
+      anpts=float(ii)
+      itry=itry+1
+      hend_try(1,itry)=hendra*2./anpts
+      hend_try(2,itry)=hendrb*2./anpts
+      hend_try(3,itry)=hendrc*2./anpts
+      hend_try(4,itry)=hendrd*2./anpts
+
+      itry=itry+1
+      amean_prob_log=
+     X  amean_prob_log/amax1(1.,amean_prob_log_n)
+      prob_log_max=amax1(0.01,amin1(100.,prob_log_max))
+      hend_try(1,itry)=(prob_log_max-amean_prob_log)*cos_max
+      hend_try(2,itry)=(prob_log_max-amean_prob_log)*sin_max
+      small_scale=1.
+      hend_try(1,itry)=small_scale*cos_max
+      hend_try(2,itry)=small_scale*sin_max
+      hend_try(3,itry)=0.
+      hend_try(4,itry)=0.
+
+c     that was ft way..Now do fit of weighted log-prob:
+
+      SUMLOG = 0.0
+      II = 0
+      DO 10 I = IIN, 360, INC
+      II = II + 1
+
+ 10   SUMLOG = SUMLOG + PLOG(II)
+      SUMLOG = SUMLOG/FLOAT(II)
+      NVAR = 4
+C
+C
+C...SET UP LINEAR LEAST SQUARES MATRIX
+C
+C
+C...FIRST IT MUST BE ZEROED
+      DO 15 I = 1, 10
+ 15   TRIX(I) = 0.D0
+      DO 18 I = 1, 4
+ 18   RHS(I) = 0.D0
+C
+C
+      II = 0
+      DO 40 I = IIN, 360, INC
+      II = II + 1
+      WGT = P(II)
+      DELTA = PLOG(II) - SUMLOG
+      ITWO = I + I - 1
+      IF (ITWO .GT. 360) ITWO = ITWO - 360
+C
+C
+C...NOTE THAT SINCE NO REFINEMENT IS ALLOWED ON OUTPUT CYCLE,
+C   WE CAN USE TRIX ARRAY TO STORE  MATRIX ELEMENTS
+C
+      DERIVAw(1) = STAB(I+90)
+      DERIVAw(2) = STAB(I)
+      DERIVAw(3) = STAB(ITWO+90)
+      DERIVAw(4) = STAB(ITWO)
+C
+      MM = 1
+      DO 30 K = 1, 4
+      XX = DERIVAw(K) * WGT
+      RHS(K) = RHS(K) + XX * DELTA
+      DO 30 KK = K, 4
+      TRIX(MM) = TRIX(MM) + XX * DERIVAw(KK)
+ 30   MM = MM + 1
+C
+C
+ 40   CONTINUE
+C...ALL DONE, SOLVE MATRIX
+C	
+      CALL MATSOL(nvar)
+C
+C
+C... PUT IN COEFFICIENTS
+C
+      itry=itry+1
+      do 45 i=1,4
+       hend_try(i,itry)=rhs(i)
+ 45   continue
+C      i_no_fit=0
+      i_no_fit=1
+      if(i_no_fit.eq.1)then
+      HENDRA = RHS(1)
+      HENDRB = RHS(2)
+      HENDRC = RHS(3)
+      HENDRD = RHS(4)
+
+      else
+
+c     start with each starting coeff; find best fit nearby. choose best.
+
+      fit_best=1.e+30
+
+      ntry=itry
+      i_first_try=1
+      do 1000 itry=1,ntry
+      if(fit_best.le.0.001)then
+c      we're already fine. quit
+       goto 1000
+      endif
+
+c     start with this set of coeffs
+      do 145 i=1,4
+         fit(i)=hend_try(i,itry)
+         fit(i)=amax1(-100.,amin1(100.,fit(i)))
+         if(i_first_try.eq.1)then
+           i_first_try=0
+           fit_sav(i)=fit(i)
+         endif
+ 145  continue
+c     now adjust to minimize discrepancy in p(ii)-p_calc(ii):
+
+      call lmdif1(fcnhend,m,m,fit,yfit,tol,
+     X  info,iwa,wa,lwa)
+      if(yfit(1).lt.fit_best)then
+        fit_best=yfit(1)
+        do 146 i=1,4
+         fit(i)=amax1(-100.,amin1(100.,fit(i)))
+         fit_sav(i)=fit(i)
+ 146    continue
+      endif
+ 1000 continue
+
+c     ok, save the best one
+
+      do 1200 i=1,4
+        fit(i)=fit_sav(i)
+ 1200 continue
+      HENDRA = FIT_sav(1)
+      HENDRB = FIT_sav(2)
+      HENDRC = FIT_sav(3)
+      HENDRD = FIT_sav(4)
+      endif
+      GO TO 1600
+C
+C
+C...CENTRIC REFLECTIONS
+C
+ 1500 HENDRC = 0.0
+      HENDRD = 0.0
+      TMP = 0.5 * (PLOG(1) - PLOG(2))
+      HENDRA = STAB(IIN+90+1) * TMP
+      HENDRB = STAB(IIN+1)    * TMP
+C
+ 1600  CONTINUE
+C
+      hend(1)=hendra
+      hend(2)=hendrb
+      hend(3)=hendrc
+      hend(4)=hendrd
+      RETURN
+      END
+
+      subroutine matsol(nvar)
+      save
+      common /wu/ a(126256),b(502),deriva(502)
+      DOUBLEPRECISION A,B
+      DOUBLEPRECISION DET,R,S,T
+      integer nvar
+      INTEGER N
+      INTEGER I, II, IJ, IK, IL, J, JI, JJ, JK, JL, K, KI, KJ, KK
+C
+      N = NVAR
+      DET = 0.0D0
+      IDET = 0
+      IF (N .LE. 0) GO TO 250
+      IF (N .GT. 1) GO TO 10
+      IF (A(1) .NE. 0.0D0) GO TO 10
+      B(1) = 0.0D0
+      RETURN
+C
+   10 CONTINUE
+      DET = 0.5D0
+      IDET = 1
+      II = 1
+      DO 110 I = 1, N
+      IL = I - 1
+      IF (I .EQ. 1) GO TO 50
+      IJ = I
+      DO 40 J = 1, IL
+      R = A(IJ)
+      IF (J .EQ. 1) GO TO 30
+      IK = I
+      JK = J
+      JL = J - 1
+      DO 20 K = 1, JL
+      R = R - A(IK)*A(JK)
+      IK = N - K + IK
+   20 JK = N - K + JK
+   30 A(IJ) = R
+   40 IJ = N - J + IJ
+   50 R = A(II)
+      IF (I .EQ. 1) GO TO 70
+      KK = 1
+      IK = I
+      DO 60 K = 1, IL
+      S = A(IK)
+      T = S*A(KK)
+      A(IK) = T
+      R = R - S*T
+      IK = N - K + IK
+   60 KK = N - K + 1 + KK
+   70 DET = DET*R
+   80 IF (DABS(DET) .LT. 1.0D0) GO TO 90
+      DET = DET/2.0D0
+      IDET = IDET + 1
+      GO TO 80
+   90 IF (DABS(DET) .GE. 0.5D0) GO TO 100
+      IF (DABS(DET) .LT. 1.0D-30) GO TO 260
+      DET = DET*2.0D0
+      IDET = IDET - 1
+      GO TO 90
+  100 CONTINUE
+      A(II) = 1.0D0/R
+  110 II = N - I + 1 + II
+      DO 130 I = 1, N
+      IF (I .EQ. 1) GO TO 130
+      IK = I
+      IL = I - 1
+      R = B(I)
+      DO 120 K = 1, IL
+      R = R - B(K)*A(IK)
+  120 IK = N - K + IK
+      B(I) = R
+  130 CONTINUE
+      II = N*(N + 1)/2
+      DO 160 J = 1, N
+      I = N + 1 - J
+      R = B(I)*A(II)
+      IF (J .EQ. 1) GO TO 150
+      IL = I + 1
+      KI = II + 1
+      DO 140 K = IL, N
+      R = R - A(KI)*B(K)
+  140 KI = KI + 1
+  150 B(I) = R
+  160 II = II - J - 1
+      II = N*(N + 1)/2
+      DO 200 I = 1, N
+      IF (I .EQ. N) GO TO 200
+      IJ = II - I
+      IL = N - I
+      J = IL
+      JJ = IJ - 1
+      DO 190 JK = 1, IL
+      R = -A(IJ)
+      IF (JK .EQ. 1) GO TO 180
+      IK = IJ + N - J
+      JL = J + 1
+      KJ = JJ + 1
+      DO 170 K = JL, IL
+      R = R - A(IK)*A(KJ)
+      IK = IK + N - K
+  170 KJ = KJ + 1
+  180 A(IJ) = R
+      J = J - 1
+      JJ = JJ - N + J - 1
+  190 IJ = IJ - N + J
+  200 II = II - I - 1
+      IL = N - 1
+      IF (IL .LE. 0) GO TO 250
+      II = 1
+      DO 240 I = 1, IL
+      JI = II
+      JJ = II
+      DO 230 J = I, N
+      R = A(JI)
+      IF (J .NE. I) R = R*A(JJ)
+      IF (J .EQ. N) GO TO 220
+      JL = J + 1
+      KI = JI + 1
+      KJ = JJ + 1
+      KK = JJ + N - J + 1
+      DO 210 K = JL, N
+      R = R + A(KI)*A(KJ)*A(KK)
+      KI = KI + 1
+      KJ = KJ + 1
+  210 KK = KK + N - K + 1
+  220 A(JI) = R
+      JI = JI + 1
+  230 JJ = JJ + N - J + 1
+  240 II = II + N - I + 1
+  250 CONTINUE
+      RETURN
+  260 CONTINUE
+      m=0
+      do 310 i=1,nvar
+      b(i)=0.0d0
+      do 310 j=i,nvar
+      m=m+1
+      a(m)=0.0d0
+ 310  continue
+      return
+      END
+      subroutine fcnhend(m,n,a,yfit,iflag)
+      save
+      integer m,n,iflag
+      real a(n),yfit(m)
+        common /hluser/ iin,inc,nvar,p(72),plog(72),stab(451)
+        real hend(4),p_calc(72),p_log_calc(72)
+c 	compare calc and obs p(ii)
+        do 1 k=1,m
+        yfit(k)=0.
+ 1      continue
+c       restrict allowed values of coeffs
+        do 2 j=1,n
+        hend(j)=amax1(-100.,amin1(100.,a(j)))
+ 2      continue
+c       find max of ploghl:
+        a_big_hl=-1.e+30
+        ii=0
+        do 35 i=iin,360,inc
+        ii=ii+1
+        theta=float(i-1)*3.14159/180.
+        cost=cos(theta)
+        sint=sin(theta)
+        cos2t=cos(2.*theta)
+        sin2t=sin(2.*theta)
+        p_log_calc(ii) = 
+     X   hend(1)*cost+hend(2)*sint+hend(3)*cos2t+hend(4)*sin2t
+        a_big_hl=amax1(a_big_hl,p_log_calc(ii))
+ 35     continue
+c       get fit between obs, calc p(i), using offset for calc
+        sum_obs=0.
+        sum_calc=0.
+        ii=0
+        do 45 i=iin,360,inc
+        ii=ii+1
+c       just adjust so biggest p_calc=1.0 (keeps everything on scale)
+        p_log_norm=p_log_calc(ii)-a_big_hl
+        p_calc(ii)=exp(amax1(-40.,amin1(40.,p_log_norm)))
+        sum_calc=sum_calc+p_calc(ii)
+        sum_obs=sum_obs+p(ii)
+ 45     continue
+        sum_calc=amax1(1.e-10,sum_calc)
+        sum_obs=amax1(1.e-10,sum_obs)
+c 	normalize and compare
+        ii=0
+        do 55 i=iin,360,inc
+        ii=ii+1
+        p_calc(ii)=p_calc(ii)/sum_calc
+        p_calc_norm=p_calc(ii)
+        yfit(1)=yfit(1)+(p_calc(ii)-p(ii)/sum_obs)**2
+ 55     continue
+        yfit(1)=sqrt(amax1(0.,yfit(1)/float(ii)))
+      RETURN
+      END
+      subroutine lmdif1(fcn,m,n,x,fvec,tol,info,iwa,wa,lwa)
+      integer m,n,info,lwa
+      integer iwa(n)
+      real tol
+      real x(n),fvec(m),wa(lwa)
+      external fcn
+      integer maxfev,mode,mp5n,nfev,nprint
+      real epsfcn,factor,ftol,gtol,xtol,zero
+      data factor,zero /1.0e2,0.0e0/
+      info = 0
+      if (n .le. 0 .or. m .lt. n .or. tol .lt. zero
+     *    .or. lwa .lt. m*n + 5*n + m) go to 10
+      maxfev = 200*(n + 1)
+      ftol = tol
+      xtol = tol
+      gtol = zero
+      epsfcn = zero
+      mode = 1
+      nprint = 0
+      mp5n = m + 5*n
+      call lmdif(fcn,m,n,x,fvec,ftol,xtol,gtol,maxfev,epsfcn,wa(1),
+     *           mode,factor,nprint,info,nfev,wa(mp5n+1),m,iwa,
+     *           wa(n+1),wa(2*n+1),wa(3*n+1),wa(4*n+1),wa(5*n+1))
+      if (info .eq. 8) info = 4
+   10 continue
+      return
+      end
+      subroutine lmdif(fcn,m,n,x,fvec,ftol,xtol,gtol,maxfev,epsfcn,
+     *                 diag,mode,factor,nprint,info,nfev,fjac,ldfjac,
+     *                 ipvt,qtf,wa1,wa2,wa3,wa4)
+      integer m,n,maxfev,mode,nprint,info,nfev,ldfjac
+      integer ipvt(n)
+      real ftol,xtol,gtol,epsfcn,factor
+      real x(n),fvec(m),diag(n),fjac(ldfjac,n),qtf(n),wa1(n),wa2(n),
+     *     wa3(n),wa4(m)
+      external fcn
+      integer i,iflag,iter,j,l
+      real actred,delta,dirder,epsmch,fnorm,fnorm1,gnorm,one,par,
+     *     pnorm,prered,p1,p5,p25,p75,p0001,ratio,sum,temp,temp1,
+     *     temp2,xnorm,zero
+      real spmpar,enorm
+      data one,p1,p5,p25,p75,p0001,zero
+     *     /1.0e0,1.0e-1,5.0e-1,2.5e-1,7.5e-1,1.0e-4,0.0e0/
+      epsmch = spmpar(1)
+      info = 0
+      iflag = 0
+      nfev = 0
+      temp=0.
+      xnorm=0.
+      if (n .le. 0 .or. m .lt. n .or. ldfjac .lt. m
+     *    .or. ftol .lt. zero .or. xtol .lt. zero .or. gtol .lt. zero
+     *    .or. maxfev .le. 0 .or. factor .le. zero) go to 300
+      if (mode .ne. 2) go to 20
+      do 10 j = 1, n
+         if (diag(j) .le. zero) go to 300
+   10    continue
+   20 continue
+      iflag = 1
+      call fcn(m,n,x,fvec,iflag)
+      nfev = 1
+      if (iflag .lt. 0) go to 300
+      fnorm = enorm(m,fvec)
+      par = zero
+      iter = 1
+   30 continue
+         iflag = 2
+         call fdjac2(fcn,m,n,x,fvec,fjac,ldfjac,iflag,epsfcn,wa4)
+         nfev = nfev + n
+         if (iflag .lt. 0) go to 300
+         if (nprint .le. 0) go to 40
+         iflag = 0
+         if (mod(iter-1,nprint) .eq. 0) call fcn(m,n,x,fvec,iflag)
+         if (iflag .lt. 0) go to 300
+   40    continue
+         call qrfac(m,n,fjac,ldfjac,.true.,ipvt,n,wa1,wa2,wa3)
+         if (iter .ne. 1) go to 80
+         if (mode .eq. 2) go to 60
+         do 50 j = 1, n
+            diag(j) = wa2(j)
+            if (wa2(j) .eq. zero) diag(j) = one
+   50       continue
+   60    continue
+         do 70 j = 1, n
+            wa3(j) = diag(j)*x(j)
+   70       continue
+         xnorm = enorm(n,wa3)
+         delta = factor*xnorm
+         if (delta .eq. zero) delta = factor
+   80    continue
+         do 90 i = 1, m
+            wa4(i) = fvec(i)
+   90       continue
+         do 130 j = 1, n
+            if (fjac(j,j) .eq. zero) go to 120
+            sum = zero
+            do 100 i = j, m
+               sum = sum + fjac(i,j)*wa4(i)
+  100          continue
+            temp = -sum/fjac(j,j)
+            do 110 i = j, m
+               wa4(i) = wa4(i) + fjac(i,j)*temp
+  110          continue
+  120       continue
+            fjac(j,j) = wa1(j)
+            qtf(j) = wa4(j)
+  130       continue
+         gnorm = zero
+         if (fnorm .eq. zero) go to 170
+         do 160 j = 1, n
+            l = ipvt(j)
+            if (wa2(l) .eq. zero) go to 150
+            sum = zero
+            do 140 i = 1, j
+               sum = sum + fjac(i,j)*(qtf(i)/fnorm)
+  140          continue
+            gnorm = amax1(gnorm,abs(sum/wa2(l)))
+  150       continue
+  160       continue
+  170    continue
+         if (gnorm .le. gtol) info = 4
+         if (info .ne. 0) go to 300
+         if (mode .eq. 2) go to 190
+         do 180 j = 1, n
+            diag(j) = amax1(diag(j),wa2(j))
+  180       continue
+  190    continue
+  200    continue
+            call lmpar(n,fjac,ldfjac,ipvt,diag,qtf,delta,par,wa1,wa2,
+     *                 wa3,wa4)
+            do 210 j = 1, n
+               wa1(j) = -wa1(j)
+               wa2(j) = x(j) + wa1(j)
+               wa3(j) = diag(j)*wa1(j)
+  210          continue
+            pnorm = enorm(n,wa3)
+            if (iter .eq. 1) delta = amin1(delta,pnorm)
+            iflag = 1
+            call fcn(m,n,wa2,wa4,iflag)
+            nfev = nfev + 1
+            if (iflag .lt. 0) go to 300
+            fnorm1 = enorm(m,wa4)
+            actred = -one
+            if (p1*fnorm1 .lt. fnorm) actred = one - (fnorm1/fnorm)**2
+            do 230 j = 1, n
+               wa3(j) = zero
+               l = ipvt(j)
+               temp = wa1(l)
+               do 220 i = 1, j
+                  wa3(i) = wa3(i) + fjac(i,j)*temp
+  220             continue
+  230          continue
+            temp1 = enorm(n,wa3)/fnorm
+            temp2 = (sqrt(par)*pnorm)/fnorm
+            prered = temp1**2 + temp2**2/p5
+            dirder = -(temp1**2 + temp2**2)
+            ratio = zero
+            if (prered .ne. zero) ratio = actred/prered
+            if (ratio .gt. p25) go to 240
+               if (actred .ge. zero) temp = p5
+               if (actred .lt. zero)
+     *            temp = p5*dirder/(dirder + p5*actred)
+               if (p1*fnorm1 .ge. fnorm .or. temp .lt. p1) temp = p1
+               delta = temp*amin1(delta,pnorm/p1)
+               par = par/temp
+               go to 260
+  240       continue
+               if (par .ne. zero .and. ratio .lt. p75) go to 250
+               delta = pnorm/p5
+               par = p5*par
+  250          continue
+  260       continue
+            if (ratio .lt. p0001) go to 290
+            do 270 j = 1, n
+               x(j) = wa2(j)
+               wa2(j) = diag(j)*x(j)
+  270          continue
+            do 280 i = 1, m
+               fvec(i) = wa4(i)
+  280          continue
+            xnorm = enorm(n,wa2)
+            fnorm = fnorm1
+            iter = iter + 1
+  290       continue
+            if (abs(actred) .le. ftol .and. prered .le. ftol
+     *          .and. p5*ratio .le. one) info = 1
+            if (delta .le. xtol*xnorm) info = 2
+            if (abs(actred) .le. ftol .and. prered .le. ftol
+     *          .and. p5*ratio .le. one .and. info .eq. 2) info = 3
+            if (info .ne. 0) go to 300
+            if (nfev .ge. maxfev) info = 5
+            if (abs(actred) .le. epsmch .and. prered .le. epsmch
+     *          .and. p5*ratio .le. one) info = 6
+            if (delta .le. epsmch*xnorm) info = 7
+            if (gnorm .le. epsmch) info = 8
+            if (info .ne. 0) go to 300
+            if (ratio .lt. p0001) go to 200
+         go to 30
+  300 continue
+      if (iflag .lt. 0) info = iflag
+      iflag = 0
+      if (nprint .gt. 0) call fcn(m,n,x,fvec,iflag)
+      return
+      end
+      subroutine fdjac2(fcn,m,n,x,fvec,fjac,ldfjac,iflag,epsfcn,wa)
+      external fcn
+      integer m,n,ldfjac,iflag
+      real epsfcn
+      real x(n),fvec(m),fjac(ldfjac,n),wa(m)
+      integer i,j
+      real eps,epsmch,h,temp,zero
+      real spmpar
+      data zero /0.0e0/
+      epsmch = spmpar(1)
+      eps = sqrt(amax1(epsfcn,epsmch))
+      do 20 j = 1, n
+         temp = x(j)
+         h = eps*abs(temp)
+         if (h .eq. zero) h = eps
+         x(j) = temp + h
+         call fcn(m,n,x,wa,iflag)
+         if (iflag .lt. 0) go to 30
+         x(j) = temp
+         do 10 i = 1, m
+            fjac(i,j) = (wa(i) - fvec(i))/h
+   10       continue
+   20    continue
+   30 continue
+      return
+      end
+      subroutine lmpar(n,r,ldr,ipvt,diag,qtb,delta,par,x,sdiag,wa1,
+     *                 wa2)
+      integer n,ldr
+      integer ipvt(n)
+      real delta,par
+      real r(ldr,n),diag(n),qtb(n),x(n),sdiag(n),wa1(n),wa2(n)
+      integer i,iter,j,jm1,jp1,k,l,nsing
+      real dxnorm,dwarf,fp,gnorm,parc,parl,paru,p1,p001,sum,temp,zero
+      real spmpar,enorm
+      data p1,p001,zero /1.0e-1,1.0e-3,0.0e0/
+      dwarf = spmpar(2)
+      nsing = n
+      do 10 j = 1, n
+         wa1(j) = qtb(j)
+         if (r(j,j) .eq. zero .and. nsing .eq. n) nsing = j - 1
+         if (nsing .lt. n) wa1(j) = zero
+   10    continue
+      if (nsing .lt. 1) go to 50
+      do 40 k = 1, nsing
+         j = nsing - k + 1
+         wa1(j) = wa1(j)/r(j,j)
+         temp = wa1(j)
+         jm1 = j - 1
+         if (jm1 .lt. 1) go to 30
+         do 20 i = 1, jm1
+            wa1(i) = wa1(i) - r(i,j)*temp
+   20       continue
+   30    continue
+   40    continue
+   50 continue
+      do 60 j = 1, n
+         l = ipvt(j)
+         x(l) = wa1(j)
+   60    continue
+      iter = 0
+      do 70 j = 1, n
+         wa2(j) = diag(j)*x(j)
+   70    continue
+      dxnorm = enorm(n,wa2)
+      fp = dxnorm - delta
+      if (fp .le. p1*delta) go to 220
+      parl = zero
+      if (nsing .lt. n) go to 120
+      do 80 j = 1, n
+         l = ipvt(j)
+         wa1(j) = diag(l)*(wa2(l)/dxnorm)
+   80    continue
+      do 110 j = 1, n
+         sum = zero
+         jm1 = j - 1
+         if (jm1 .lt. 1) go to 100
+         do 90 i = 1, jm1
+            sum = sum + r(i,j)*wa1(i)
+   90       continue
+  100    continue
+         wa1(j) = (wa1(j) - sum)/r(j,j)
+  110    continue
+      temp = enorm(n,wa1)
+      parl = ((fp/delta)/temp)/temp
+  120 continue
+      do 140 j = 1, n
+         sum = zero
+         do 130 i = 1, j
+            sum = sum + r(i,j)*qtb(i)
+  130       continue
+         l = ipvt(j)
+         wa1(j) = sum/diag(l)
+  140    continue
+      gnorm = enorm(n,wa1)
+      paru = gnorm/delta
+      if (paru .eq. zero) paru = dwarf/amin1(delta,p1)
+      par = amax1(par,parl)
+      par = amin1(par,paru)
+      if (par .eq. zero) par = gnorm/dxnorm
+  150 continue
+         iter = iter + 1
+         if (par .eq. zero) par = amax1(dwarf,p001*paru)
+         temp = sqrt(par)
+         do 160 j = 1, n
+            wa1(j) = temp*diag(j)
+  160       continue
+         call qrsolv(n,r,ldr,ipvt,wa1,qtb,x,sdiag,wa2)
+         do 170 j = 1, n
+            wa2(j) = diag(j)*x(j)
+  170       continue
+         dxnorm = enorm(n,wa2)
+         temp = fp
+         fp = dxnorm - delta
+         if (abs(fp) .le. p1*delta
+     *       .or. parl .eq. zero .and. fp .le. temp
+     *            .and. temp .lt. zero .or. iter .eq. 10) go to 220
+         do 180 j = 1, n
+            l = ipvt(j)
+            wa1(j) = diag(l)*(wa2(l)/dxnorm)
+  180       continue
+         do 210 j = 1, n
+            wa1(j) = wa1(j)/sdiag(j)
+            temp = wa1(j)
+            jp1 = j + 1
+            if (n .lt. jp1) go to 200
+            do 190 i = jp1, n
+               wa1(i) = wa1(i) - r(i,j)*temp
+  190          continue
+  200       continue
+  210       continue
+         temp = enorm(n,wa1)
+         parc = ((fp/delta)/temp)/temp
+         if (fp .gt. zero) parl = amax1(parl,par)
+         if (fp .lt. zero) paru = amin1(paru,par)
+         par = amax1(parl,par+parc)
+         go to 150
+  220 continue
+      if (iter .eq. 0) par = zero
+      return
+      end
+      subroutine qrfac(m,n,a,lda,pivot,ipvt,lipvt,rdiag,acnorm,wa)
+      integer m,n,lda,lipvt
+      integer ipvt(lipvt)
+      logical pivot
+      real a(lda,n),rdiag(n),acnorm(n),wa(n)
+      integer i,j,jp1,k,kmax,minmn
+      real ajnorm,epsmch,one,p05,sum,temp,zero
+      real spmpar,enorm
+      data one,p05,zero /1.0e0,5.0e-2,0.0e0/
+      epsmch = spmpar(1)
+      do 10 j = 1, n
+         acnorm(j) = enorm(m,a(1,j))
+         rdiag(j) = acnorm(j)
+         wa(j) = rdiag(j)
+         if (pivot) ipvt(j) = j
+   10    continue
+      minmn = min0(m,n)
+      do 110 j = 1, minmn
+         if (.not.pivot) go to 40
+         kmax = j
+         do 20 k = j, n
+            if (rdiag(k) .gt. rdiag(kmax)) kmax = k
+   20       continue
+         if (kmax .eq. j) go to 40
+         do 30 i = 1, m
+            temp = a(i,j)
+            a(i,j) = a(i,kmax)
+            a(i,kmax) = temp
+   30       continue
+         rdiag(kmax) = rdiag(j)
+         wa(kmax) = wa(j)
+         k = ipvt(j)
+         ipvt(j) = ipvt(kmax)
+         ipvt(kmax) = k
+   40    continue
+         ajnorm = enorm(m-j+1,a(j,j))
+         if (ajnorm .eq. zero) go to 100
+         if (a(j,j) .lt. zero) ajnorm = -ajnorm
+         do 50 i = j, m
+            a(i,j) = a(i,j)/ajnorm
+   50       continue
+         a(j,j) = a(j,j) + one
+         jp1 = j + 1
+         if (n .lt. jp1) go to 100
+         do 90 k = jp1, n
+            sum = zero
+            do 60 i = j, m
+               sum = sum + a(i,j)*a(i,k)
+   60          continue
+            temp = sum/a(j,j)
+            do 70 i = j, m
+               a(i,k) = a(i,k) - temp*a(i,j)
+   70          continue
+            if (.not.pivot .or. rdiag(k) .eq. zero) go to 80
+            temp = a(j,k)/rdiag(k)
+            rdiag(k) = rdiag(k)*sqrt(amax1(zero,one-temp**2))
+            if (p05*(rdiag(k)/wa(k))**2 .gt. epsmch) go to 80
+            rdiag(k) = enorm(m-j,a(jp1,k))
+            wa(k) = rdiag(k)
+   80       continue
+   90       continue
+  100    continue
+         rdiag(j) = -ajnorm
+  110    continue
+      return
+      end
+      real function spmpar(i)
+      integer i
+      real atol(3)
+      data atol/4.66e-10,1.e-37,1.e+37/
+      spmpar=atol(i)
+      return
+      end
+      real function enorm(n,x)
+      integer n
+      real x(n)
+      integer i
+      real agiant,floatn,one,rdwarf,rgiant,s1,s2,s3,xabs,x1max,x3max,
+     *     zero
+      data one,zero,rdwarf,rgiant /1.0e0,0.0e0,3.834e-20,1.304e19/
+      enorm=0.
+      s1 = zero
+      s2 = zero
+      s3 = zero
+      x1max = zero
+      x3max = zero
+      floatn = n
+      agiant = rgiant/floatn
+      do 90 i = 1, n
+         xabs = abs(x(i))
+         if (xabs .gt. rdwarf .and. xabs .lt. agiant) go to 70
+            if (xabs .le. rdwarf) go to 30
+               if (xabs .le. x1max) go to 10
+                  s1 = one + s1*(x1max/xabs)**2
+                  x1max = xabs
+                  go to 20
+   10          continue
+                  s1 = s1 + (xabs/x1max)**2
+   20          continue
+               go to 60
+   30       continue
+               if (xabs .le. x3max) go to 40
+                  s3 = one + s3*(x3max/xabs)**2
+                  x3max = xabs
+                  go to 50
+   40          continue
+                  if (xabs .ne. zero) s3 = s3 + (xabs/x3max)**2
+   50          continue
+   60       continue
+            go to 80
+   70    continue
+            s2 = s2 + xabs**2
+   80    continue
+   90    continue
+      if (s1 .eq. zero) go to 100
+         enorm = x1max*sqrt(s1+(s2/x1max)/x1max)
+         go to 130
+  100 continue
+         if (s2 .eq. zero) go to 110
+            if (s2 .ge. x3max)
+     *         enorm = sqrt(s2*(one+(x3max/s2)*(x3max*s3)))
+            if (s2 .lt. x3max)
+     *         enorm = sqrt(x3max*((s2/x3max)+(x3max*s3)))
+            go to 120
+  110    continue
+            enorm = x3max*sqrt(s3)
+  120    continue
+  130 continue
+      return
+      end
+
+      subroutine qrsolv(n,r,ldr,ipvt,diag,qtb,x,sdiag,wa)
+      integer n,ldr
+      integer ipvt(n)
+      real r(ldr,n),diag(n),qtb(n),x(n),sdiag(n),wa(n)
+      integer i,j,jp1,k,kp1,l,nsing
+      real cos,cotan,p5,p25,qtbpj,sin,sum,tan,temp,zero
+      data p5,p25,zero /5.0e-1,2.5e-1,0.0e0/
+      do 20 j = 1, n
+         do 10 i = j, n
+            r(i,j) = r(j,i)
+   10       continue
+         x(j) = r(j,j)
+         wa(j) = qtb(j)
+   20    continue
+c
+c     eliminate the diagonal matrix d using a givens rotation.
+c
+      do 100 j = 1, n
+c
+c        prepare the row of d to be eliminated, locating the
+c        diagonal element using p from the qr factorization.
+c
+         l = ipvt(j)
+         if (diag(l) .eq. zero) go to 90
+         do 30 k = j, n
+            sdiag(k) = zero
+   30       continue
+         sdiag(j) = diag(l)
+c
+c        the transformations to eliminate the row of d
+c        modify only a single element of (q transpose)*b
+c        beyond the first n, which is initially zero.
+c
+         qtbpj = zero
+         do 80 k = j, n
+c
+c           determine a givens rotation which eliminates the
+c           appropriate element in the current row of d.
+c
+            if (sdiag(k) .eq. zero) go to 70
+            if (abs(r(k,k)) .ge. abs(sdiag(k))) go to 40
+               cotan = r(k,k)/sdiag(k)
+               sin = p5/sqrt(p25+p25*cotan**2)
+               cos = sin*cotan
+               go to 50
+   40       continue
+               tan = sdiag(k)/r(k,k)
+               cos = p5/sqrt(p25+p25*tan**2)
+               sin = cos*tan
+   50       continue
+c
+c           compute the modified diagonal element of r and
+c           the modified element of ((q transpose)*b,0).
+c
+            r(k,k) = cos*r(k,k) + sin*sdiag(k)
+            temp = cos*wa(k) + sin*qtbpj
+            qtbpj = -sin*wa(k) + cos*qtbpj
+            wa(k) = temp
+c
+c           accumulate the tranformation in the row of s.
+c
+            kp1 = k + 1
+            if (n .lt. kp1) go to 70
+            do 60 i = kp1, n
+               temp = cos*r(i,k) + sin*sdiag(i)
+               sdiag(i) = -sin*r(i,k) + cos*sdiag(i)
+               r(i,k) = temp
+   60          continue
+   70       continue
+   80       continue
+   90    continue
+c
+c        store the diagonal element of s and restore
+c        the corresponding diagonal element of r.
+c
+         sdiag(j) = r(j,j)
+         r(j,j) = x(j)
+  100    continue
+c
+c     solve the triangular system for z. if the system is
+c     singular, then obtain a least squares solution.
+c
+      nsing = n
+      do 110 j = 1, n
+         if (sdiag(j) .eq. zero .and. nsing .eq. n) nsing = j - 1
+         if (nsing .lt. n) wa(j) = zero
+  110    continue
+      if (nsing .lt. 1) go to 150
+      do 140 k = 1, nsing
+         j = nsing - k + 1
+         sum = zero
+         jp1 = j + 1
+         if (nsing .lt. jp1) go to 130
+         do 120 i = jp1, nsing
+            sum = sum + r(i,j)*wa(i)
+  120       continue
+  130    continue
+         wa(j) = (wa(j) - sum)/sdiag(j)
+  140    continue
+  150 continue
+c
+c     permute the components of z back to components of x.
+c
+      do 160 j = 1, n
+         l = ipvt(j)
+         x(l) = wa(j)
+  160    continue
+      return
+c
+c     last card of subroutine qrsolv.
+c
+      end
+

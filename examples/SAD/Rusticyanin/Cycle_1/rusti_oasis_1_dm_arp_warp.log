@@ -1,0 +1,328 @@
+#CCP4I VERSION CCP4Interface 1.3.19
+#CCP4I SCRIPT LOG arp_warp
+#CCP4I DATE 28 Mar 2005  20:16:59
+#CCP4I USER wang
+#CCP4I PROJECT PROJECT
+#CCP4I JOB_ID 441
+#CCP4I SCRATCH /tmp/wang
+#CCP4I HOSTNAME wang.wang
+#CCP4I PID 19685
+
+The parameter file is: /home/wang/Temp/441_arp_warp.par
+
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+
+Entering arp_warp.sh from the CCP4I interface
+<!--SUMMARY_END--></FONT></B>
+
+The working directory is: /home/wang/Temp
+ARP/wARP will run in the subdirectory: 441_arp_warp
+
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+Building free atoms model.
+<!--SUMMARY_END--></FONT></B>
+
+ Initial map calculated, amplitude weighted by extra weight ...
+ ... and extended to AU
+ Now building 1 initial model(s)
+ Had to go as low as 0.25 sigma, to complete atoms search.
+
+
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  ARP will be iterated with REFMAC 5.
+  50 ARP refinement cycles will be run in total.
+  Atoms will be removed if below 0.9 sigmas in 2mFoDFc map.
+  Atoms will be added if above 3.2 sigmas in mFoDFc map.
+
+  Refmac Refinement Parameters
+    3 REFMAC cycle(s) with  0.4 0.4  fractional shifts damping in each ARP cycle.
+    Weight for restraints is set to AUTO 
+    FreeR will be used for monitoring and sigmaa calculations.
+    Anisotropic scaling with bulk solvent correction
+
+  Autobuilding Parameters
+    Autobuilding will take place every 5 ARP cycles.
+    Side chain docking will be performed from autobuilding cycle number 0
+    The Depth first search (NEW) autobuilding algorithm will be used.
+ 
+=================================================================================
+| Please cite the correct publication for the ARP/wARP application you are using|
+| Perrakis A, Morris R and Lamzin VS                                            |
+| Automated protein model building combined with iterative structure refinement.|
+| Nature Struct. Biol., 6:458-463, 1999.                                        |
+=================================================================================
+
+<!--SUMMARY_END--></FONT></B>
+   7396 reflections ( 100.00 % complete ), for refining 1365 atoms.
+   Observations/parameters ratio is 1.35
+------------------------------------------------------
+ Starting model:  R = 0.324 (Rfree = 0.328). 
+------------------------------------------------------
+  Cycle 0:   After refmac, R = 0.225 (Rfree = 0.331).
+             Found 11 (11 requested) and removed  5 (5 requested) atoms.
+------------------------------------------------------
+ Building Cycle 0    Atomic shape factors  1.97  2.22
+   Round 1: 83 peptides in 14 chains. The longest chain comprises 15 peptides.
+   Round 2: 103 peptides in 13 chains. The longest chain comprises 15 peptides.
+   Round 3: 105 peptides in 12 chains. The longest chain comprises 14 peptides.
+   Round 4: 110 peptides in 14 chains. The longest chain comprises 14 peptides.
+   Taking the results from Round 3
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 10, Residues 86, Connectivity Index 0.75
+  0 of these (0 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  334 restraints for refining 1270 atoms.
+   Observations/parameters ratio is 1.46
+------------------------------------------------------
+  Cycle 1:   After refmac, R = 0.245 (Rfree = 0.364).
+             Found 28 (28 requested) and removed  14 (14 requested) atoms.
+  Cycle 2:   After refmac, R = 0.218 (Rfree = 0.362).
+             Found 25 (25 requested) and removed  12 (12 requested) atoms.
+  Cycle 3:   After refmac, R = 0.202 (Rfree = 0.359).
+             Found 22 (22 requested) and removed  11 (11 requested) atoms.
+  Cycle 4:   After refmac, R = 0.194 (Rfree = 0.363).
+             Found 20 (20 requested) and removed  10 (10 requested) atoms.
+  Cycle 5:   After refmac, R = 0.184 (Rfree = 0.369).
+             Found 18 (18 requested) and removed  9 (9 requested) atoms.
+------------------------------------------------------
+ Building Cycle 1    Atomic shape factors  2.03  2.29
+   Round 1: 100 peptides in 10 chains. The longest chain comprises 16 peptides.
+   Round 2: 117 peptides in 11 chains. The longest chain comprises 20 peptides.
+   Round 3: 128 peptides in 10 chains. The longest chain comprises 25 peptides.
+   Round 4: 129 peptides in 9 chains. The longest chain comprises 25 peptides.
+   Round 5: 137 peptides in 9 chains. The longest chain comprises 27 peptides.
+   Taking the results from Round 5
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 8, Residues 124, Connectivity Index 0.87
+  2 of these (50 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  685 restraints for refining 1276 atoms.
+   Observations/parameters ratio is 1.45
+------------------------------------------------------
+  Cycle 6:   After refmac, R = 0.232 (Rfree = 0.346).
+             Found 27 (27 requested) and removed  13 (13 requested) atoms.
+  Cycle 7:   After refmac, R = 0.205 (Rfree = 0.340).
+             Found 24 (24 requested) and removed  12 (12 requested) atoms.
+  Cycle 8:   After refmac, R = 0.189 (Rfree = 0.339).
+             Found 21 (21 requested) and removed  10 (10 requested) atoms.
+  Cycle 9:   After refmac, R = 0.181 (Rfree = 0.334).
+             Found 19 (19 requested) and removed  9 (9 requested) atoms.
+  Cycle 10:  After refmac, R = 0.174 (Rfree = 0.332).
+             Found 17 (17 requested) and removed  8 (8 requested) atoms.
+------------------------------------------------------
+ Building Cycle 2    Atomic shape factors  2.00  2.26
+   Round 1: 134 peptides in 6 chains. The longest chain comprises 42 peptides.
+   Round 2: 138 peptides in 3 chains. The longest chain comprises 53 peptides.
+   Round 3: 133 peptides in 4 chains. The longest chain comprises 50 peptides.
+   Taking the results from Round 2
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 135, Connectivity Index 0.94
+  2 of these (95 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  910 restraints for refining 1283 atoms.
+   Observations/parameters ratio is 1.44
+------------------------------------------------------
+  Cycle 11:  After refmac, R = 0.214 (Rfree = 0.322).
+             Found 25 (25 requested) and removed  12 (12 requested) atoms.
+  Cycle 12:  After refmac, R = 0.189 (Rfree = 0.305).
+             Found 23 (23 requested) and removed  11 (11 requested) atoms.
+  Cycle 13:  After refmac, R = 0.177 (Rfree = 0.298).
+             Found 20 (20 requested) and removed  10 (10 requested) atoms.
+  Cycle 14:  After refmac, R = 0.169 (Rfree = 0.291).
+             Found 18 (18 requested) and removed  7 (9 requested) atoms.
+  Cycle 15:  After refmac, R = 0.163 (Rfree = 0.281).
+             Found 16 (16 requested) and removed  8 (8 requested) atoms.
+------------------------------------------------------
+ Building Cycle 3    Atomic shape factors  1.97  2.22
+   Round 1: 136 peptides in 5 chains. The longest chain comprises 49 peptides.
+   Round 2: 139 peptides in 3 chains. The longest chain comprises 53 peptides.
+   Round 3: 138 peptides in 4 chains. The longest chain comprises 53 peptides.
+   Taking the results from Round 2
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 136, Connectivity Index 0.94
+  3 of these (136 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1057 restraints for refining 1304 atoms.
+   Observations/parameters ratio is 1.42
+------------------------------------------------------
+  Cycle 16:  After refmac, R = 0.196 (Rfree = 0.277).
+             Found 21 (21 requested) and removed  10 (10 requested) atoms.
+  Cycle 17:  After refmac, R = 0.177 (Rfree = 0.264).
+             Found 19 (19 requested) and removed  9 (9 requested) atoms.
+  Cycle 18:  After refmac, R = 0.166 (Rfree = 0.258).
+             Found 14 (17 requested) and removed  8 (8 requested) atoms.
+  Cycle 19:  After refmac, R = 0.162 (Rfree = 0.257).
+             Found 16 (16 requested) and removed  8 (8 requested) atoms.
+  Cycle 20:  After refmac, R = 0.158 (Rfree = 0.262).
+             Found 14 (14 requested) and removed  7 (7 requested) atoms.
+------------------------------------------------------
+ Building Cycle 4    Atomic shape factors  1.97  2.22
+   Round 1: 138 peptides in 5 chains. The longest chain comprises 49 peptides.
+   Round 2: 140 peptides in 3 chains. The longest chain comprises 52 peptides.
+   Round 3: 141 peptides in 3 chains. The longest chain comprises 53 peptides.
+   Taking the results from Round 3
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 138, Connectivity Index 0.96
+  3 of these (138 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1073 restraints for refining 1306 atoms.
+   Observations/parameters ratio is 1.42
+------------------------------------------------------
+  Cycle 21:  After refmac, R = 0.189 (Rfree = 0.268).
+             Found 21 (21 requested) and removed  10 (10 requested) atoms.
+  Cycle 22:  After refmac, R = 0.171 (Rfree = 0.266).
+             Found 18 (18 requested) and removed  9 (9 requested) atoms.
+  Cycle 23:  After refmac, R = 0.160 (Rfree = 0.261).
+             Found 11 (17 requested) and removed  8 (8 requested) atoms.
+  Cycle 24:  After refmac, R = 0.155 (Rfree = 0.255).
+             Found 15 (16 requested) and removed  8 (8 requested) atoms.
+  Cycle 25:  After refmac, R = 0.152 (Rfree = 0.259).
+             Found 15 (15 requested) and removed  7 (7 requested) atoms.
+------------------------------------------------------
+ Building Cycle 5    Atomic shape factors  1.97  2.22
+   Round 1: 141 peptides in 4 chains. The longest chain comprises 50 peptides.
+   Round 2: 144 peptides in 3 chains. The longest chain comprises 51 peptides.
+   Round 3: 143 peptides in 4 chains. The longest chain comprises 52 peptides.
+   Taking the results from Round 2
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 141, Connectivity Index 0.94
+  3 of these (141 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1100 restraints for refining 1306 atoms.
+   Observations/parameters ratio is 1.42
+------------------------------------------------------
+  Cycle 26:  After refmac, R = 0.185 (Rfree = 0.257).
+             Found 21 (21 requested) and removed  10 (10 requested) atoms.
+  Cycle 27:  After refmac, R = 0.165 (Rfree = 0.247).
+             Found 18 (18 requested) and removed  9 (9 requested) atoms.
+  Cycle 28:  After refmac, R = 0.156 (Rfree = 0.242).
+             Found 17 (17 requested) and removed  6 (8 requested) atoms.
+  Cycle 29:  After refmac, R = 0.151 (Rfree = 0.235).
+             Found 14 (14 requested) and removed  7 (7 requested) atoms.
+  Cycle 30:  After refmac, R = 0.149 (Rfree = 0.238).
+             Found 13 (13 requested) and removed  6 (6 requested) atoms.
+------------------------------------------------------
+ Building Cycle 6    Atomic shape factors  1.97  2.22
+   Round 1: 141 peptides in 3 chains. The longest chain comprises 50 peptides.
+   Round 2: 144 peptides in 3 chains. The longest chain comprises 52 peptides.
+   Taking the results from Round 2
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 141, Connectivity Index 0.96
+  3 of these (141 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1102 restraints for refining 1307 atoms.
+   Observations/parameters ratio is 1.41
+------------------------------------------------------
+  Cycle 31:  After refmac, R = 0.181 (Rfree = 0.251).
+             Found 20 (20 requested) and removed  10 (10 requested) atoms.
+  Cycle 32:  After refmac, R = 0.162 (Rfree = 0.240).
+             Found 18 (18 requested) and removed  9 (9 requested) atoms.
+  Cycle 33:  After refmac, R = 0.154 (Rfree = 0.232).
+             Found 15 (17 requested) and removed  8 (8 requested) atoms.
+  Cycle 34:  After refmac, R = 0.149 (Rfree = 0.226).
+             Found 15 (15 requested) and removed  7 (7 requested) atoms.
+  Cycle 35:  After refmac, R = 0.147 (Rfree = 0.229).
+             Found 13 (14 requested) and removed  7 (7 requested) atoms.
+------------------------------------------------------
+ Building Cycle 7    Atomic shape factors  1.97  2.22
+   Round 1: 151 peptides in 4 chains. The longest chain comprises 50 peptides.
+   Round 2: 145 peptides in 4 chains. The longest chain comprises 53 peptides.
+   Taking the results from Round 1
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 4, Residues 147, Connectivity Index 0.94
+  4 of these (147 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1149 restraints for refining 1323 atoms.
+   Observations/parameters ratio is 1.40
+------------------------------------------------------
+  Cycle 36:  After refmac, R = 0.195 (Rfree = 0.257).
+             Found 17 (17 requested) and removed  8 (8 requested) atoms.
+  Cycle 37:  After refmac, R = 0.179 (Rfree = 0.246).
+             Found 15 (15 requested) and removed  7 (7 requested) atoms.
+  Cycle 38:  After refmac, R = 0.163 (Rfree = 0.239).
+             Found 14 (14 requested) and removed  7 (7 requested) atoms.
+  Cycle 39:  After refmac, R = 0.153 (Rfree = 0.224).
+             Found 12 (12 requested) and removed  6 (6 requested) atoms.
+  Cycle 40:  After refmac, R = 0.147 (Rfree = 0.215).
+             Found 11 (11 requested) and removed  5 (5 requested) atoms.
+------------------------------------------------------
+ Building Cycle 8    Atomic shape factors  1.97  2.22
+   Round 1: 150 peptides in 3 chains. The longest chain comprises 52 peptides.
+   Round 2: 151 peptides in 4 chains. The longest chain comprises 52 peptides.
+   Taking the results from Round 1
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 3, Residues 147, Connectivity Index 0.95
+  3 of these (147 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+   7396 reflections ( 100.00 % complete ) and  1145 restraints for refining 1319 atoms.
+   Observations/parameters ratio is 1.40
+------------------------------------------------------
+  Cycle 41:  After refmac, R = 0.181 (Rfree = 0.243).
+             Found 18 (18 requested) and removed  9 (9 requested) atoms.
+  Cycle 42:  After refmac, R = 0.162 (Rfree = 0.231).
+             Found 16 (16 requested) and removed  8 (8 requested) atoms.
+  Cycle 43:  After refmac, R = 0.154 (Rfree = 0.231).
+             Found 15 (15 requested) and removed  5 (7 requested) atoms.
+  Cycle 44:  After refmac, R = 0.149 (Rfree = 0.232).
+             Found 13 (13 requested) and removed  6 (6 requested) atoms.
+  Cycle 45:  After refmac, R = 0.146 (Rfree = 0.234).
+             Found 11 (11 requested) and removed  5 (5 requested) atoms.
+------------------------------------------------------
+ Building Cycle 9    Atomic shape factors  1.97  2.22
+   Round 1: 150 peptides in 4 chains. The longest chain comprises 50 peptides.
+   Round 2: 151 peptides in 5 chains. The longest chain comprises 52 peptides.
+   Taking the results from Round 1
+
+  Last building cycle: 
+  Chain fragments will be rearranged
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+  Chains 4, Residues 146, Connectivity Index 0.93
+  4 of these (146 residues) have been docked in sequence.
+<!--SUMMARY_END--></FONT></B>
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+<!--SUMMARY_END--></FONT></B>
+------------------------------------------------------
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+ Sequence coverage is 99 %
+<!--SUMMARY_END--></FONT></B>
+  All DUM atoms will be removed
+ ---> Final restrained refinement block. Update only waters.
+   7396 reflections ( 100.00 % complete ) and  1135 restraints for refining 1104 atoms.
+   Observations/parameters ratio is 1.67
+------------------------------------------------------
+  Cycle 46:  After refmac, R = 0.238 (Rfree = 0.262).
+             Found 48 (61 requested) and removed  0 (61 requested) atoms.
+  Cycle 47:  After refmac, R = 0.201 (Rfree = 0.242).
+             Found 24 (51 requested) and removed  7 (25 requested) atoms.
+  Cycle 48:  After refmac, R = 0.192 (Rfree = 0.244).
+             Found 15 (48 requested) and removed  7 (24 requested) atoms.
+  Cycle 49:  After refmac, R = 0.187 (Rfree = 0.240).
+             Found 10 (46 requested) and removed  8 (23 requested) atoms.
+
+   Writing map files covering molecule ...
+<B><FONT COLOR="#FF0000"><!--SUMMARY_BEGIN-->
+ Normal termination of warpNtrace
+<!--SUMMARY_END--></FONT></B>
+[1] 25990
+<!--SUMMARY_END--></FONT></B>
+
+
+#CCP4I TERMINATION STATUS 1 
+#CCP4I TERMINATION TIME 28 Mar 2005  21:51:54
+#CCP4I TERMINATION OUTPUT_FILES  /home/wang/Temp/441_arp_warp.par PROJECT /home/wang/Temp/441_wilson.loggraph PROJECT
+#CCP4I MESSAGE Task completed successfully
+
+
+#CCP4I TERMINATION STATUS 1 All done
+#CCP4I TERMINATION TIME 28 Mar 2005  21:51:54
+#CCP4I MESSAGE Task completed successfully
+
